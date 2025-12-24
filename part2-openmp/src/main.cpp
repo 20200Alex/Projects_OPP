@@ -1,20 +1,22 @@
-#include "integral_calculator.hpp"
+#include "book_analyzer.hpp"
 #include <iostream>
 #include <vector>
 #include <string>
 
 int main(int argc, char* argv[]) {
-    std::cout << "OpenMP Project: Numerical Integration" << std::endl;
-    std::cout << "Method: Rectangle Rule with OpenMP" << std::endl;
+    std::cout << "OpenMP Project: Book Analysis" << std::endl;
+    std::cout << "Variant 15: Frequency of Russian letters" << std::endl;
     
-    // Параметры по умолчанию
-    size_t segments = 1000000;  // 1 миллион сегментов (меньше для быстрого теста)
-    std::vector<int> threadConfigs = {1, 2, 4};
+    BookAnalyzer analyzer;
     
-    // Парсинг аргументов командной строки
+    // Путь к файлу (можно передать как аргумент)
+    std::string filename = "data/karamazov_sample.txt";
     if (argc > 1) {
-        segments = std::stoul(argv[1]);
+        filename = argv[1];
     }
+    
+    // Конфигурации потоков для тестирования
+    std::vector<int> threadConfigs = {1, 2, 4, 8};
     if (argc > 2) {
         threadConfigs.clear();
         for (int i = 2; i < argc; ++i) {
@@ -22,48 +24,57 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    // Создаем калькулятор
-    IntegralCalculator calculator;
-    
-    // Получаем тестовые функции (10 тестов как требуется)
-    auto testFunctions = IntegralCalculator::createTestFunctions();
-    
     std::cout << "\nConfiguration:" << std::endl;
-    std::cout << "  Number of test functions: " << testFunctions.size() << std::endl;
-    std::cout << "  Segments per integral: " << segments << std::endl;
+    std::cout << "  Input file: " << filename << std::endl;
     std::cout << "  Thread configurations: ";
     for (int t : threadConfigs) std::cout << t << " ";
     std::cout << std::endl;
     
-    // УБРАТЬ вызов omp_get_max_threads() если вызывает проблемы
-    // или добавить проверку
     #ifdef _OPENMP
     std::cout << "\nMaximum available threads: " << omp_get_max_threads() << std::endl;
-    #else
-    std::cout << "\nOpenMP not available" << std::endl;
     #endif
     
     
     try {
-        // Запускаем тесты
-        auto results = calculator.runTests(testFunctions, segments, threadConfigs);
+        // Запускаем тесты производительности
+        auto results = analyzer.runPerformanceTests(filename, threadConfigs);
         
-        // Сохраняем результаты
-        calculator.saveResultsToCSV(results, "integration_results.csv");
-        
-        // Генерируем скрипт для построения графиков
-        calculator.generatePlotScript(results, "plot_results.py");
-        
-        // УБРАТЬ автоматический запуск Python скрипта
-        std::cout << "\nTo generate plots, run: python3 plot_results.py" << std::endl;
+        if (!results.empty()) {
+            // Сохраняем результаты
+            analyzer.saveResultsToCSV(results, "book_analysis_results.csv");
+            
+            // Генерируем скрипт для графиков
+            analyzer.generatePlotScript(results, "plot_book_analysis.py");
+            
+            // Выводим детальный анализ для последнего результата
+            const auto& lastResult = results.back();
+            analyzer.printTopLetters(lastResult, 15);
+            
+            std::cout << "Analysis completed successfully!" << std::endl;
+            std::cout << "Files generated:" << std::endl;
+            std::cout << "  - book_analysis_results.csv" << std::endl;
+            std::cout << "  - plot_book_analysis.py" << std::endl;
+            std::cout << "  - book_analysis_speedup.png" << std::endl;
+        } else {
+            std::cout << "\nNo results were generated." << std::endl;
+        }
         
     } catch (const std::exception& e) {
         std::cerr << "\nError: " << e.what() << std::endl;
+        
+        // Если не удалось прочитать файл, используем тестовый текст
+        std::cout << "\nUsing test text for demonstration..." << std::endl;
+        
+        std::string testText = BookAnalyzer::createTestText();
+        auto result = analyzer.analyzeText(testText, 1);
+        
+        analyzer.printTopLetters(result, 10);
+        
+        std::cout << "\nNote: For full analysis, provide a text file as argument" << std::endl;
+        std::cout << "Usage: " << argv[0] << " <filename> [threads...]" << std::endl;
+        
         return 1;
     }
-    
-    std::cout << "Program completed successfully!" << std::endl;
-    std::cout << "Check integration_results.csv" << std::endl;
     
     return 0;
 }
