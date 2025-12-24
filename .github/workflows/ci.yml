@@ -194,3 +194,23 @@ jobs:
           build_coverage/coverage_report.xml
           build_coverage/*.gcno
           build_coverage/*.gcda
+    - name: Run tests with timeout protection
+      run: |
+        cd build
+        echo "Running tests with 10-second timeout..."
+        
+        # Используем timeout для защиты от зависания
+        timeout 10s ./tests/knight_selection_tests --gtest_color=yes --gtest_repeat=1 \
+          --gtest_filter="*QuickTest:*SimpleSelection:*ConstructorTest" \
+          || exit_code=$?
+        
+        if [ ${exit_code:-0} -eq 124 ]; then
+          echo "ERROR: Tests timed out after 10 seconds"
+          echo "This indicates a deadlock in the code"
+          exit 1
+        elif [ ${exit_code:-0} -ne 0 ]; then
+          echo "Tests failed with exit code: ${exit_code}"
+          exit ${exit_code}
+        else
+          echo "Tests completed successfully"
+        fi
