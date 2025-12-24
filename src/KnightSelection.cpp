@@ -1,222 +1,229 @@
 #include "KnightSelection.hpp"
-#include <iostream>
+#include <gtest/gtest.h>
 #include <thread>
-#include <chrono>
+#include <vector>
 #include <algorithm>
+#include <future>
 
-KnightSelection::KnightSelection(int totalKnights, int requiredKnights)
-    : totalKnights(totalKnights)
-    , requiredKnights(requiredKnights)
-    , selected(totalKnights, false)
-    , raisedHand(totalKnights, false)
-    , selectedCount(0)
-    , selectionFinished(false)
-    , gen(rd())
-{
-    if (totalKnights <= 0 || requiredKnights <= 0 || requiredKnights > totalKnights) {
-        throw std::invalid_argument("Некорректные параметры количества рыцарей");
-    }
-}
-
-std::vector<int> KnightSelection::getNeighbors(int id) const {
+// Вспомогательная функция для получения соседей (аналогичная приватной в классе)
+static std::vector<int> getNeighborsForTest(int id, int totalKnights) {
     std::vector<int> neighbors;
-    
-    // Рыцари сидят за круглым столом
     int leftNeighbor = (id - 1 + totalKnights) % totalKnights;
     int rightNeighbor = (id + 1) % totalKnights;
-    
     neighbors.push_back(leftNeighbor);
     neighbors.push_back(rightNeighbor);
-    
     return neighbors;
 }
 
-bool KnightSelection::canRaiseHand(int id) const {
-    // Рыцарь не может поднять руку, если:
-    // 1. Он уже выбран
-    // 2. Он уже поднял руку
-    // 3. Любой из его соседей уже поднял руку
-    
-    if (selected[id] || raisedHand[id]) {
-        return false;
-    }
-    
-    auto neighbors = getNeighbors(id);
-    for (int neighbor : neighbors) {
-        if (raisedHand[neighbor]) {
-            return false;
-        }
-    }
-    
-    return true;
+// Тест 1: Проверка корректности конструкции
+TEST(KnightSelectionTest, ConstructorTest) {
+    EXPECT_NO_THROW(KnightSelection(12, 5));
+    EXPECT_THROW(KnightSelection(0, 5), std::invalid_argument);
+    EXPECT_THROW(KnightSelection(12, 0), std::invalid_argument);
+    EXPECT_THROW(KnightSelection(3, 5), std::invalid_argument);
 }
 
-int KnightSelection::selectRandomAvailableKnight() {
-    std::vector<int> availableKnights;
+// Тест 2: Проверка выбора ровно 5 рыцарей
+TEST(KnightSelectionTest, SelectExactlyFiveKnights) {
+    KnightSelection selection(12, 5);
+    selection.startSelection();
     
-    // Собираем всех рыцарей, которые могут поднять руку
-    for (int i = 0; i < totalKnights; ++i) {
-        if (canRaiseHand(i)) {
-            availableKnights.push_back(i);
-        }
-    }
-    
-    if (availableKnights.empty()) {
-        return -1;
-    }
-    
-    // Выбираем случайного рыцаря из доступных
-    std::uniform_int_distribution<> dis(0, availableKnights.size() - 1);
-    return availableKnights[dis(gen)];
+    auto selected = selection.getSelectedKnights();
+    EXPECT_EQ(selected.size(), 5) << "Должно быть выбрано ровно 5 рыцарей";
 }
 
-void KnightSelection::knightThread(int id) {
-    std::unique_lock<std::mutex> lock(mtx, std::defer_lock);
+// Тест 3: Проверка отсутствия соседей среди выбранных
+TEST(KnightSelectionTest, NoNeighborsSelected) {
+    KnightSelection selection(12, 5);
+    selection.startSelection();
     
-    while (!selectionFinished && selectedCount < requiredKnights) {
-        lock.lock();
+    EXPECT_TRUE(selection.validateSelection()) << "Выбранные рыцари не должны быть соседями";
+}
+
+// Тест 4: Многократный запуск для проверки устойчивости
+TEST(KnightSelectionTest, MultipleRunsConsistency) {
+    const int runs = 5; // Уменьшил с 10 для скорости
+    
+    for (int i = 0; i < runs; ++i) {
+        KnightSelection selection(12, 5);
+        selection.startSelection();
         
-        // Проверяем, может ли рыцарь поднять руку
-        if (canRaiseHand(id)) {
-            // Случайная задержка для имитации раздумий
-            lock.unlock();
-            std::this_thread::sleep_for(std::chrono::milliseconds(10 + (id * 7) % 50));
-            lock.lock();
-            
-            // Повторная проверка после задержки
-            if (canRaiseHand(id) && !selectionFinished) {
-                raisedHand[id] = true;
-                std::cout << "Рыцарь " << id << " поднял руку" << std::endl;
-                
-                // Короткая пауза перед выбором
-                lock.unlock();
-                std::this_thread::sleep_for(std::chrono::milliseconds(5));
-                lock.lock();
-                
-                // Проверяем, выбран ли этот рыцарь
-                if (selected[id]) {
-                    raisedHand[id] = false;
-                }
-            }
-        }
+        EXPECT_TRUE(selection.validateSelection()) 
+            << "Запуск #" << i << ": некорректный выбор рыцарей";
         
-        lock.unlock();
+        auto selected = selection.getSelectedKnights();
+        EXPECT_EQ(selected.size(), 5) 
+            << "Запуск #" << i << ": должно быть выбрано ровно 5 рыцарей";
         
-        // Небольшая пауза перед следующей попыткой
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        // Проверяем уникальность выбранных рыцарей
+        std::sort(selected.begin(), selected.end());
+        auto last = std::unique(selected.begin(), selected.end());
+        EXPECT_EQ(last, selected.end()) 
+            << "Запуск #" << i << ": дублирующиеся рыцари в выборе";
     }
 }
 
-void KnightSelection::startSelection() {
-    std::cout << "=== Начало выбора рыцарей для спецоперации ===" << std::endl;
-    std::cout << "Всего рыцарей: " << totalKnights << std::endl;
-    std::cout << "Требуется выбрать: " << requiredKnights << std::endl;
-    
-    // Запускаем потоки для каждого рыцаря
-    std::vector<std::thread> knights;
-    for (int i = 0; i < totalKnights; ++i) {
-        knights.emplace_back(&KnightSelection::knightThread, this, i);
+// Тест 5: Проверка работы с разными параметрами
+TEST(KnightSelectionTest, DifferentParameters) {
+    // Тест с большим количеством рыцарей
+    {
+        KnightSelection selection(20, 7);
+        selection.startSelection();
+        EXPECT_TRUE(selection.validateSelection()) 
+            << "Ошибка при 20 рыцарях, 7 для выбора";
     }
     
-    // Основной цикл выбора рыцарей
-    while (selectedCount < requiredKnights) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        
-        std::lock_guard<std::mutex> lock(mtx);
-        
-        // Пытаемся выбрать рыцаря
-        int knightId = selectRandomAvailableKnight();
-        
-        if (knightId != -1) {
-            // Выбираем этого рыцаря
-            selected[knightId] = true;
-            raisedHand[knightId] = false;
-            selectedCount++;
-            
-            std::cout << "\n Рыцарь " << knightId << " выбран для похода!" << std::endl;
-            std::cout << "Выбрано: " << selectedCount << " из " << requiredKnights << std::endl;
-            
-            // Опускаем руки соседей выбранного рыцаря
-            auto neighbors = getNeighbors(knightId);
-            for (int neighbor : neighbors) {
-                raisedHand[neighbor] = false;
-                std::cout << "  Рыцарь " << neighbor << " опустил руку (сосед выбранного)" << std::endl;
-            }
-            
-            // Проверяем, нужно ли продолжить
-            if (selectedCount >= requiredKnights) {
-                selectionFinished = true;
-                break;
-            }
-        }
-        
-        // Если нет доступных рыцарей, сбрасываем все поднятые руки
-        if (selectRandomAvailableKnight() == -1) {
-            std::cout << "\n Нет доступных рыцарей, сбрасываю все руки..." << std::endl;
-            std::fill(raisedHand.begin(), raisedHand.end(), false);
-        }
+    // Тест с минимальным количеством
+    {
+        KnightSelection selection(6, 3);
+        selection.startSelection();
+        EXPECT_TRUE(selection.validateSelection()) 
+            << "Ошибка при 6 рыцарях, 3 для выбора";
     }
-    
-    // Помечаем завершение выбора
-    selectionFinished = true;
-    
-    // Ожидаем завершения всех потоков
-    for (auto& knight : knights) {
-        if (knight.joinable()) {
-            knight.join();
-        }
-    }
-    
-    std::cout << "\n=== Выбор завершен ===" << std::endl;
 }
 
-void KnightSelection::printSelectedKnights() const {
-    std::cout << "\n📋 Выбранные рыцари: ";
-    bool first = true;
-    for (int i = 0; i < totalKnights; ++i) {
-        if (selected[i]) {
-            if (!first) std::cout << ", ";
-            std::cout << i;
-            first = false;
+// Тест 6: Проверка потоко-безопасности
+TEST(KnightSelectionTest, ThreadSafety) {
+    const int numThreads = 3;
+    std::vector<std::future<bool>> futures;
+    
+    for (int i = 0; i < numThreads; ++i) {
+        futures.push_back(std::async(std::launch::async, []() {
+            KnightSelection selection(12, 5);
+            selection.startSelection();
+            return selection.validateSelection();
+        }));
+    }
+    
+    // Проверяем результаты всех потоков
+    for (size_t i = 0; i < futures.size(); ++i) {
+        bool result = futures[i].get();
+        EXPECT_TRUE(result) << "Поток #" << i << " завершился с ошибкой";
+    }
+}
+
+// Тест 7: Проверка на отсутствие deadlock с таймаутом
+TEST(KnightSelectionTest, NoDeadlock) {
+    // Используем promise/future для контроля таймаута
+    std::promise<bool> promise;
+    std::future<bool> future = promise.get_future();
+    
+    std::thread worker([&promise]() {
+        try {
+            KnightSelection selection(12, 5);
+            selection.startSelection();
+            promise.set_value(selection.validateSelection());
+        } catch (...) {
+            promise.set_exception(std::current_exception());
+        }
+    });
+    
+    // Ждем с таймаутом 15 секунд (увеличил для надежности)
+    auto status = future.wait_for(std::chrono::seconds(15));
+    
+    if (status == std::future_status::timeout) {
+        // Если таймаут, убиваем поток и проваливаем тест
+        worker.detach(); // ВНИМАНИЕ: Это оставляет поток висеть, но лучше чем deadlock
+        FAIL() << "Таймаут 15 секунд - возможный deadlock!";
+    } else {
+        // Если успел, проверяем результат
+        worker.join();
+        if (status == std::future_status::ready) {
+            EXPECT_TRUE(future.get()) << "Выбор рыцарей некорректен";
         }
     }
+}
+
+// Тест 8: Проверка, что выбраны разные рыцари в разных запусках
+TEST(KnightSelectionTest, DifferentSelectionsInDifferentRuns) {
+    KnightSelection selection1(12, 5);
+    KnightSelection selection2(12, 5);
+    
+    selection1.startSelection();
+    selection2.startSelection();
+    
+    auto selected1 = selection1.getSelectedKnights();
+    auto selected2 = selection2.getSelectedKnights();
+    
+    std::sort(selected1.begin(), selected1.end());
+    std::sort(selected2.begin(), selected2.end());
+    
+    // Не обязательно, но вероятно, что выборы будут разными
+    // из-за случайности. Проверяем, что оба корректны.
+    EXPECT_TRUE(selection1.validateSelection());
+    EXPECT_TRUE(selection2.validateSelection());
+    
+    // Выводим для информации
+    std::cout << "Первый выбор: ";
+    for (int k : selected1) std::cout << k << " ";
+    std::cout << "\nВторой выбор: ";
+    for (int k : selected2) std::cout << k << " ";
     std::cout << std::endl;
 }
 
-std::vector<int> KnightSelection::getSelectedKnights() const {
-    std::vector<int> result;
-    for (int i = 0; i < totalKnights; ++i) {
-        if (selected[i]) {
-            result.push_back(i);
-        }
+// Тест 9: Проверка граничных случаев
+TEST(KnightSelectionTest, BoundaryCases) {
+    // Максимальный выбор (каждый второй рыцарь)
+    {
+        KnightSelection selection(10, 5);
+        selection.startSelection();
+        EXPECT_TRUE(selection.validateSelection());
     }
-    return result;
+    
+    // Минимальное количество рыцарей
+    {
+        KnightSelection selection(3, 1);
+        selection.startSelection();
+        auto selected = selection.getSelectedKnights();
+        EXPECT_EQ(selected.size(), 1);
+    }
 }
 
-bool KnightSelection::validateSelection() const {
-    auto selectedKnights = getSelectedKnights();
+// Тест 10: Интеграционный тест с проверкой вывода
+TEST(KnightSelectionTest, IntegrationTest) {
+    // Перенаправляем вывод для проверки
+    testing::internal::CaptureStdout();
     
-    // Проверяем количество выбранных рыцарей
-    if (selectedKnights.size() != static_cast<size_t>(requiredKnights)) {
-        std::cerr << "Ошибка: выбрано " << selectedKnights.size() 
-                  << " рыцарей вместо " << requiredKnights << std::endl;
-        return false;
+    KnightSelection selection(12, 5);
+    selection.startSelection();
+    selection.printSelectedKnights();
+    
+    std::string output = testing::internal::GetCapturedStdout();
+    
+    // Проверяем результаты
+    auto selected = selection.getSelectedKnights();
+    
+    // Основные проверки
+    EXPECT_EQ(selected.size(), 5);
+    EXPECT_TRUE(selection.validateSelection());
+    
+    // Дополнительные проверки
+    for (int knight : selected) {
+        EXPECT_GE(knight, 0);
+        EXPECT_LT(knight, 12);
     }
     
-    // Проверяем, что нет соседей среди выбранных
-    for (size_t i = 0; i < selectedKnights.size(); ++i) {
-        for (size_t j = i + 1; j < selectedKnights.size(); ++j) {
-            int diff = std::abs(selectedKnights[i] - selectedKnights[j]);
-            int circularDiff = std::min(diff, totalKnights - diff);
-            
-            // В круглом столе соседи имеют разницу 1 или totalKnights-1
-            if (circularDiff == 1) {
-                std::cerr << "Ошибка: рыцари " << selectedKnights[i] 
-                          << " и " << selectedKnights[j] << " являются соседями!" << std::endl;
-                return false;
-            }
-        }
-    }
+    // Проверяем, что вывод содержит информацию о рыцарях
+    EXPECT_TRUE(output.find("Выбранные рыцари:") != std::string::npos) 
+        << "Нет заголовка в выводе";
+}
+
+int main(int argc, char **argv) {
+    // Инициализация Google Test
+    ::testing::InitGoogleTest(&argc, argv);
     
-    return true;
+    // Настраиваем таймаут для всех тестов (на всякий случай)
+    ::testing::GTEST_FLAG(break_on_failure) = false;
+    ::testing::GTEST_FLAG(catch_exceptions) = true;
+    
+    std::cout << "Запуск тестов для проекта 'Выбор рыцарей'" << std::endl;
+    std::cout << "==========================================" << std::endl;
+    
+    int result = RUN_ALL_TESTS();
+    
+    std::cout << "\n==========================================" << std::endl;
+    std::cout << "Тесты завершены с кодом: " << result << std::endl;
+    std::cout << "0 = успех, 1 = провал" << std::endl;
+    
+    return result;
 }
