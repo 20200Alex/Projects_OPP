@@ -320,3 +320,14 @@ jobs:
         echo ""
         echo "=== Detailed Status ==="
         exit 0
+        
+    - name: Save generated artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: book-analyzer-results
+        path: |
+          build_book_analyzer/*.png
+          build_book_analyzer/*.pdf
+          build_book_analyzer/*.csv
+        retention-days: 30
