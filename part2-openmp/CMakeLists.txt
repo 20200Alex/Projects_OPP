@@ -1,25 +1,20 @@
 cmake_minimum_required(VERSION 3.10)
 project(BookAnalysisOpenMP VERSION 1.0.0 LANGUAGES CXX)
 
-# Поиск OpenMP
 find_package(OpenMP REQUIRED)
 
-# Настройка стандарта C++
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Опции
 option(BUILD_TESTS "Build tests" ON)
 
-# Настройки компиляции
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_compile_options(-g -O0 -Wall -Wextra)
+    add_compile_options(-g -O0 -Wall -Wextra -Wno-multichar)
 else()
-    add_compile_options(-O3 -Wall)
+    add_compile_options(-O3 -Wall -march=native)
 endif()
 
-# OpenMP
 if(OpenMP_CXX_FOUND)
     message(STATUS "OpenMP found, version: ${OpenMP_CXX_VERSION}")
     add_compile_options(${OpenMP_CXX_FLAGS})
@@ -28,7 +23,6 @@ else()
     message(FATAL_ERROR "OpenMP not found")
 endif()
 
-# Основное приложение
 add_executable(book_analysis
     src/main.cpp
     src/book_analyzer.cpp
@@ -39,7 +33,6 @@ target_include_directories(book_analysis
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-# Тесты
 if(BUILD_TESTS)
     enable_testing()
     
@@ -67,7 +60,18 @@ if(BUILD_TESTS)
     endif()
 endif()
 
-# Копируем тестовые данные в билд директорию
-file(COPY data/ DESTINATION ${CMAKE_BINARY_DIR}/data)
+# Копируем скрипты
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_analysis.sh.in
+    ${CMAKE_BINARY_DIR}/run_analysis.sh
+    @ONLY
+)
+
+# Делаем скрипт исполняемым
+add_custom_command(
+    TARGET book_analysis POST_BUILD
+    COMMAND chmod +x ${CMAKE_BINARY_DIR}/run_analysis.sh
+    COMMENT "Making analysis script executable"
+)
 
 message(STATUS "Book Analysis project configured successfully")
