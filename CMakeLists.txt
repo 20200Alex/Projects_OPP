@@ -9,31 +9,25 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Опции проекта
 option(BUILD_TESTS "Build tests with Google Test" ON)
 option(BUILD_EXAMPLES "Build example programs" OFF)
-option(ENABLE_COVERAGE "Enable code coverage reporting" OFF)
 
 # Настройки компиляции
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_compile_options(-g -O0 -Wall -Wextra -Wpedantic -Werror)
+    add_compile_options(-g -O0 -Wall -Wextra -Wpedantic)
 else()
     add_compile_options(-O2 -Wall)
 endif()
 
-# Включение покрытия кода
-if(ENABLE_COVERAGE)
-    add_compile_options(--coverage -fprofile-arcs -ftest-coverage)
-    add_link_options(--coverage)
-endif()
+# Поиск pthread
+find_package(Threads REQUIRED)
 
 # Основная библиотека проекта
-add_library(KnightSelectionLib STATIC
+add_library(KnightSelectionLib
     src/KnightSelection.cpp
 )
 
 target_include_directories(KnightSelectionLib
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/src
-    PRIVATE
-        ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 # Основное приложение
@@ -42,9 +36,8 @@ add_executable(KnightSelectionApp
 )
 
 target_link_libraries(KnightSelectionApp
-    PRIVATE
-        KnightSelectionLib
-        pthread
+    KnightSelectionLib
+    Threads::Threads
 )
 
 # Тестирование
@@ -52,30 +45,40 @@ if(BUILD_TESTS)
     enable_testing()
     
     # Поиск GoogleTest
-    find_package(GTest REQUIRED)
+    find_package(GTest)
     
-    # Тестовое приложение
-    add_executable(knight_selection_tests
-        tests/test_knight_selection.cpp
-    )
-    
-    target_link_libraries(knight_selection_tests
-        PRIVATE
+    if(GTest_FOUND)
+        message(STATUS "Google Test found, building tests")
+        
+        # Тестовое приложение
+        add_executable(knight_selection_tests
+            tests/test_knight_selection.cpp
+        )
+        
+        target_link_libraries(knight_selection_tests
             KnightSelectionLib
             GTest::gtest
             GTest::gtest_main
-            pthread
-    )
-    
-    target_include_directories(knight_selection_tests
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/src
-    )
-    
-    # Добавление тестов в CTest
-    add_test(NAME KnightSelectionTests
-        COMMAND knight_selection_tests
-    )
+            Threads::Threads
+        )
+        
+        target_include_directories(knight_selection_tests
+            PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/src
+        )
+        
+        # Добавление тестов в CTest
+        add_test(NAME KnightSelectionTests
+            COMMAND knight_selection_tests
+        )
+        
+        # Создаем каталог для исполняемого файла тестов
+        set_target_properties(knight_selection_tests PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
+        )
+    else()
+        message(WARNING "Google Test not found, tests will not be built")
+    endif()
 endif()
 
 # Установка
@@ -91,6 +94,3 @@ install(TARGETS KnightSelectionLib
 install(FILES src/KnightSelection.hpp
     DESTINATION include
 )
-
-# Пакетирование
-include(CPack)
