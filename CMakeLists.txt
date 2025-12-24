@@ -2,12 +2,10 @@ cmake_minimum_required(VERSION 3.14)
 project(ParallelProgrammingProject VERSION 1.0.0)
 
 # Описание проекта
-message(STATUS "==========================================")
 message(STATUS "Parallel Programming Project")
 message(STATUS "Part 1: Threads - Knight Selection")
 message(STATUS "Part 2: OpenMP - Numerical Integration")
 message(STATUS "Part 3: MPI - (to be implemented)")
-message(STATUS "==========================================")
 
 # Основные опции
 option(BUILD_ALL_PARTS "Build all project parts" ON)
