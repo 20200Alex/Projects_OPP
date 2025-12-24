@@ -217,12 +217,11 @@ std::vector<BookAnalyzer::AnalysisResult> BookAnalyzer::benchmarkThreads(
     std::vector<AnalysisResult> results;
     double singleThreadTime = 0.0;
     
-    std::cout << "\n=== OpenMP Performance Benchmark ===" << std::endl;
+    std::cout << "\nOpenMP Performance Benchmark" << std::endl;
     std::cout << "Book: " << filename << std::endl;
     std::cout << "Thread configurations: ";
     for (int t : threadConfigs) std::cout << t << " ";
     std::cout << std::endl;
-    std::cout << "=====================================" << std::endl;
     
     try {
         std::string text = readFileToString(filename);
@@ -700,22 +699,20 @@ void BookAnalyzer::writePythonPlotScript(const std::string& filename, const std:
 
 // Вывод результатов анализа
 void BookAnalyzer::printResults(const AnalysisResult& result, int topN) {
-    std::cout << "\n╔══════════════════════════════════════╗" << std::endl;
-    std::cout << "║       ANALYSIS RESULTS SUMMARY       ║" << std::endl;
-    std::cout << "╚══════════════════════════════════════╝" << std::endl;
+    std::cout << "ANALYSIS RESULTS SUMMARY" << std::endl;
     
-    std::cout << "\n📊 Processing Statistics:" << std::endl;
-    std::cout << "   └─ Threads used: " << result.threadsUsed << std::endl;
-    std::cout << "   └─ Processing time: " << result.processingTime.count() / 1000.0 << " ms" << std::endl;
-    std::cout << "   └─ Total Russian letters: " << result.totalLetters << std::endl;
-    std::cout << "   └─ Total characters: " << result.totalCharacters << std::endl;
+    std::cout << "\nProcessing Statistics:" << std::endl;
+    std::cout << " Threads used: " << result.threadsUsed << std::endl;
+    std::cout << " Processing time: " << result.processingTime.count() / 1000.0 << " ms" << std::endl;
+    std::cout << " Total Russian letters: " << result.totalLetters << std::endl;
+    std::cout << " Total characters: " << result.totalCharacters << std::endl;
     
     if (result.speedup > 0) {
-        std::cout << "   └─ Speedup: " << std::fixed << std::setprecision(2) 
+        std::cout << " Speedup: " << std::fixed << std::setprecision(2) 
                   << result.speedup << "x" << std::endl;
     }
     
-    std::cout << "\n🏆 Top " << topN << " Most Frequent Russian Letters:" << std::endl;
+    std::cout << "\nTop " << topN << " Most Frequent Russian Letters:" << std::endl;
     
     int displayN = std::min(topN, static_cast<int>(result.sortedLetters.size()));
     for (int i = 0; i < displayN; ++i) {
@@ -728,14 +725,12 @@ void BookAnalyzer::printResults(const AnalysisResult& result, int topN) {
                   << std::fixed << std::setprecision(2) << std::setw(5) << percentage << "%)" << std::endl;
     }
     
-    std::cout << "\n📈 Total unique Russian letters: " << result.sortedLetters.size() << std::endl;
+    std::cout << "\nTotal unique Russian letters: " << result.sortedLetters.size() << std::endl;
 }
 
 // Вывод результатов бенчмарка
 void BookAnalyzer::printBenchmarkResults(const std::vector<AnalysisResult>& results) {
-    std::cout << "\n╔══════════════════════════════════════════════════╗" << std::endl;
-    std::cout << "║          BENCHMARK RESULTS SUMMARY               ║" << std::endl;
-    std::cout << "╚══════════════════════════════════════════════════╝" << std::endl;
+    std::cout << "BENCHMARK RESULTS SUMMARY" << std::endl;
     
     std::cout << "\n" << std::setw(10) << "Threads" 
               << std::setw(15) << "Time (ms)" 
@@ -773,15 +768,15 @@ void BookAnalyzer::printBenchmarkResults(const std::vector<AnalysisResult>& resu
         }
         
         std::cout << "\n" << std::string(73, '═') << std::endl;
-        std::cout << "📈 Performance Summary:" << std::endl;
-        std::cout << "   └─ Optimal thread count: " << bestThreads 
+        std::cout << "Performance Summary:" << std::endl;
+        std::cout << " Optimal thread count: " << bestThreads 
                   << " (efficiency: " << std::fixed << std::setprecision(1) 
                   << (bestEfficiency * 100.0) << "%)" << std::endl;
-        std::cout << "   └─ Best speedup: " << std::setprecision(2) 
+        std::cout << " Best speedup: " << std::setprecision(2) 
                   << bestSpeedup << "x" << std::endl;
-        std::cout << "   └─ Linear speedup at " << bestThreads 
+        std::cout << " Linear speedup at " << bestThreads 
                   << " threads: " << bestThreads << "x (ideal)" << std::endl;
-        std::cout << "   └─ Actual vs ideal: " << std::setprecision(1) 
+        std::cout << " Actual vs ideal: " << std::setprecision(1) 
                   << (bestSpeedup / bestThreads * 100.0) << "% of ideal" << std::endl;
     }
 }
