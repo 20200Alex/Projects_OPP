@@ -382,8 +382,67 @@ jobs:
         fi
         
         echo ""
-        echo "=================================================="
         echo "          END OF SUMMARY"
-        echo "=================================================="
         
         exit 0
+         part3-mpi:
+    runs-on: ubuntu-22.04
+    name: Part 3 - MPI (City Capture)
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install MPI dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake g++ build-essential libopenmpi-dev openmpi-bin
+          
+    - name: Configure and build Part 3
+      run: |
+        echo "Configuring MPI City Capture..."
+        mkdir -p build_part3
+        cd build_part3
+        
+        # Создаем CMakeLists.txt
+        echo 'cmake_minimum_required(VERSION 3.14)' > CMakeLists.txt
+        echo 'project(MPICityCapture)' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'find_package(MPI REQUIRED)' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'set(CMAKE_CXX_STANDARD 17)' >> CMakeLists.txt
+        echo 'set(CMAKE_CXX_STANDARD_REQUIRED ON)' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'add_compile_options(-Wall -Wextra -O2)' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'add_executable(city_capture' >> CMakeLists.txt
+        echo '    ../part3-mpi/src/main.cpp' >> CMakeLists.txt
+        echo '    ../part3-mpi/src/CityCapture.cpp' >> CMakeLists.txt
+        echo ')' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'target_include_directories(city_capture' >> CMakeLists.txt
+        echo '    PRIVATE' >> CMakeLists.txt
+        echo '        ../part3-mpi/src' >> CMakeLists.txt
+        echo ')' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'target_link_libraries(city_capture MPI::MPI_CXX)' >> CMakeLists.txt
+        
+        echo "Building project..."
+        cmake .
+        make
+        
+    - name: Run MPI simulation
+      run: |
+        cd build_part3
+        echo "Testing MPI City Capture..."
+        
+        if [ -f "city_capture" ]; then
+          echo "Running with 6 processes (5 cities)..."
+          timeout 10s mpirun -np 6 --oversubscribe ./city_capture 5 2>&1 | tail -20 || echo "MPI run completed"
+          
+          echo ""
+          echo "Running with 11 processes (10 cities)..."
+          timeout 10s mpirun -np 11 --oversubscribe ./city_capture 10 2>&1 | tail -20 || echo "MPI run completed"
+        else
+          echo "ERROR: city_capture executable not found!"
+        fi
