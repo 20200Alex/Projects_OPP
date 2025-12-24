@@ -290,3 +290,53 @@ jobs:
         else
           echo "Part 2: ISSUES DETECTED"
         fi
+          book-analyzer-tests:
+    runs-on: ubuntu-22.04
+    name: Part 2 - OpenMP Book Analyzer Tests
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake \
+          g++ \
+          build-essential \
+          libomp-dev \
+          libgtest-dev
+          
+    - name: Build Google Test if needed
+      run: |
+        if [ ! -f "/usr/lib/libgtest.a" ] && [ ! -f "/usr/lib/x86_64-linux-gnu/libgtest.a" ]; then
+          echo "Building Google Test from source..."
+          cd /usr/src/gtest
+          sudo cmake CMakeLists.txt
+          sudo make
+          sudo find . -name "*.a" -exec cp {} /usr/lib \;
+          cd -
+        fi
+        
+    - name: Configure and build book analyzer tests
+      run: |
+        echo "Configuring CMake for Book Analyzer..."
+        mkdir -p build_book_analyzer
+        cd build_book_analyzer
+        
+        cmake ../part2-openmp -DBUILD_TESTS=ON
+        
+        echo "Building project..."
+        make -j$(nproc)
+        
+    - name: Run book analyzer tests
+      run: |
+        cd build_book_analyzer
+        if [ -f "book_analysis_tests" ]; then
+          echo "Running book analyzer tests..."
+          ./book_analysis_tests --gtest_color=yes --gtest_brief=1
+        else
+          echo "ERROR: Test executable not found!"
+          exit 1
+        fi
