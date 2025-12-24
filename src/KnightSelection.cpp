@@ -9,9 +9,9 @@ KnightSelection::KnightSelection(int totalKnights, int requiredKnights)
     : totalKnights(totalKnights)
     , requiredKnights(requiredKnights)
     , selected(totalKnights, false)
-    , raisedHand(totalKnights, false)
+    , handRaised(totalKnights, false)
     , selectedCount(0)
-    , selectionFinished(false)
+    , stopFlag(false)
     , gen(rd())
 {
     if (totalKnights <= 0 || requiredKnights <= 0 || requiredKnights > totalKnights) {
@@ -21,26 +21,25 @@ KnightSelection::KnightSelection(int totalKnights, int requiredKnights)
 
 std::vector<int> KnightSelection::getNeighbors(int id) const {
     std::vector<int> neighbors;
-    
-    int leftNeighbor = (id - 1 + totalKnights) % totalKnights;
-    int rightNeighbor = (id + 1) % totalKnights;
-    
-    neighbors.push_back(leftNeighbor);
-    neighbors.push_back(rightNeighbor);
-    
+    int left = (id - 1 + totalKnights) % totalKnights;
+    int right = (id + 1) % totalKnights;
+    neighbors.push_back(left);
+    neighbors.push_back(right);
     return neighbors;
 }
 
 bool KnightSelection::canRaiseHand(int id) const {
     std::lock_guard<std::mutex> lock(mtx);
     
-    if (selected[id] || raisedHand[id]) {
+    // Если уже выбран или уже поднял руку
+    if (selected[id] || handRaised[id]) {
         return false;
     }
     
+    // Проверяем соседей
     auto neighbors = getNeighbors(id);
     for (int neighbor : neighbors) {
-        if (raisedHand[neighbor]) {
+        if (handRaised[neighbor] || selected[neighbor]) {
             return false;
         }
     }
@@ -48,59 +47,47 @@ bool KnightSelection::canRaiseHand(int id) const {
     return true;
 }
 
-int KnightSelection::selectRandomAvailableKnight() {
-    std::lock_guard<std::mutex> lock(mtx);
-    std::vector<int> availableKnights;
+void KnightSelection::knightProcess(int id) {
+    std::random_device localRd;
+    std::mt19937 localGen(localRd());
+    std::uniform_int_distribution<> sleepDist(50, 200);
     
-    for (int i = 0; i < totalKnights; ++i) {
-        if (!selected[i] && !raisedHand[i]) {
-            auto neighbors = getNeighbors(i);
-            bool neighborRaised = false;
-            for (int neighbor : neighbors) {
-                if (raisedHand[neighbor]) {
-                    neighborRaised = true;
-                    break;
-                }
-            }
-            if (!neighborRaised) {
-                availableKnights.push_back(i);
-            }
-        }
-    }
-    
-    if (availableKnights.empty()) {
-        return -1;
-    }
-    
-    std::uniform_int_distribution<> dis(0, availableKnights.size() - 1);
-    return availableKnights[dis(gen)];
-}
-
-void KnightSelection::knightThread(int id) {
-    while (!selectionFinished && selectedCount < requiredKnights) {
-        // Рыцарь пытается поднять руку
-        if (canRaiseHand(id)) {
-            {
-                std::lock_guard<std::mutex> lock(mtx);
-                if (!selected[id] && !selectionFinished) {
-                    raisedHand[id] = true;
+    while (!stopFlag && selectedCount < requiredKnights) {
+        // Проверяем, может ли поднять руку
+        bool shouldRaise = false;
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            shouldRaise = (!selected[id] && !handRaised[id]);
+            
+            // Проверяем соседей
+            if (shouldRaise) {
+                auto neighbors = getNeighbors(id);
+                for (int neighbor : neighbors) {
+                    if (handRaised[neighbor] || selected[neighbor]) {
+                        shouldRaise = false;
+                        break;
+                    }
                 }
             }
             
-            // Короткая пауза
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            
-            // Проверяем, не выбран ли рыцарь
-            {
-                std::lock_guard<std::mutex> lock(mtx);
-                if (selected[id]) {
-                    raisedHand[id] = false;
-                }
+            if (shouldRaise) {
+                handRaised[id] = true;
             }
         }
         
-        // Пауза перед следующей попыткой
-        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+        // Спим случайное время
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleepDist(localGen)));
+        
+        // Если поднял руку и не выбран, опускаем ее
+        if (shouldRaise) {
+            std::lock_guard<std::mutex> lock(mtx);
+            if (!selected[id]) {
+                handRaised[id] = false;
+            }
+        }
+        
+        // Короткая пауза перед следующей итерацией
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
@@ -109,72 +96,86 @@ void KnightSelection::startSelection() {
     std::cout << "Total knights: " << totalKnights << std::endl;
     std::cout << "Required to select: " << requiredKnights << std::endl;
     
-    // Запускаем потоки для рыцарей
+    // Запускаем потоки рыцарей
     std::vector<std::thread> knights;
     for (int i = 0; i < totalKnights; ++i) {
-        knights.emplace_back(&KnightSelection::knightThread, this, i);
+        knights.emplace_back(&KnightSelection::knightProcess, this, i);
     }
     
     // Основной цикл выбора
     int attempts = 0;
-    const int maxAttempts = 1000;
+    const int maxAttempts = 500;
     
     while (selectedCount < requiredKnights && attempts < maxAttempts) {
         attempts++;
         
-        // Выбираем случайного доступного рыцаря
-        int knightId = selectRandomAvailableKnight();
+        std::vector<int> available;
         
-        if (knightId != -1) {
-            {
-                std::lock_guard<std::mutex> lock(mtx);
-                
-                // Проверяем, что рыцарь все еще доступен
-                if (!selected[knightId] && !raisedHand[knightId]) {
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            
+            // Собираем всех, кто поднял руку
+            for (int i = 0; i < totalKnights; ++i) {
+                if (handRaised[i] && !selected[i]) {
                     // Проверяем соседей
-                    auto neighbors = getNeighbors(knightId);
-                    bool neighborRaised = false;
+                    bool valid = true;
+                    auto neighbors = getNeighbors(i);
                     for (int neighbor : neighbors) {
-                        if (raisedHand[neighbor]) {
-                            neighborRaised = true;
+                        if (selected[neighbor]) {
+                            valid = false;
                             break;
                         }
                     }
                     
-                    if (!neighborRaised) {
-                        selected[knightId] = true;
-                        raisedHand[knightId] = false;
-                        selectedCount++;
-                        
-                        std::cout << "Knight " << knightId << " selected for the mission" << std::endl;
-                        std::cout << "Selected: " << selectedCount << " of " << requiredKnights << std::endl;
-                        
-                        // Опускаем руки соседей
-                        for (int neighbor : neighbors) {
-                            raisedHand[neighbor] = false;
-                        }
+                    if (valid) {
+                        available.push_back(i);
+                    }
+                }
+            }
+        }
+        
+        // Если есть доступные рыцари, выбираем случайного
+        if (!available.empty()) {
+            std::uniform_int_distribution<> dis(0, available.size() - 1);
+            int chosen = available[dis(gen)];
+            
+            {
+                std::lock_guard<std::mutex> lock(mtx);
+                
+                // Двойная проверка
+                if (!selected[chosen] && handRaised[chosen]) {
+                    selected[chosen] = true;
+                    handRaised[chosen] = false;
+                    selectedCount++;
+                    
+                    std::cout << "Knight " << chosen << " selected for the mission" << std::endl;
+                    std::cout << "Selected: " << selectedCount << " of " << requiredKnights << std::endl;
+                    
+                    // Опускаем руки соседей
+                    auto neighbors = getNeighbors(chosen);
+                    for (int neighbor : neighbors) {
+                        handRaised[neighbor] = false;
                     }
                 }
             }
         } else {
-            // Нет доступных рыцарей - сбрасываем все руки
-            {
-                std::lock_guard<std::mutex> lock(mtx);
-                std::fill(raisedHand.begin(), raisedHand.end(), false);
-            }
+            // Нет доступных - небольшая пауза
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
         
-        // Пауза между итерациями выбора
+        // Каждые 10 попыток сбрасываем все руки для предотвращения deadlock
+        if (attempts % 10 == 0) {
+            std::lock_guard<std::mutex> lock(mtx);
+            std::fill(handRaised.begin(), handRaised.end(), false);
+        }
+        
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
     
-    // Завершаем выбор
-    {
-        std::lock_guard<std::mutex> lock(mtx);
-        selectionFinished = true;
-    }
+    // Останавливаем все потоки
+    stopFlag = true;
     
-    // Ждем завершения всех потоков
+    // Ждем завершения потоков
     for (auto& knight : knights) {
         if (knight.joinable()) {
             knight.join();
@@ -185,8 +186,8 @@ void KnightSelection::startSelection() {
     if (selectedCount >= requiredKnights) {
         std::cout << "Selection completed successfully" << std::endl;
     } else {
-        std::cout << "Selection failed after " << attempts << " attempts" << std::endl;
-        std::cout << "Selected only " << selectedCount << " knights" << std::endl;
+        std::cout << "Warning: Selected only " << selectedCount << " knights" << std::endl;
+        std::cout << "Expected: " << requiredKnights << " knights" << std::endl;
     }
 }
 
@@ -220,23 +221,26 @@ std::vector<int> KnightSelection::getSelectedKnights() const {
 bool KnightSelection::validateSelection() const {
     std::lock_guard<std::mutex> lock(mtx);
     
-    auto selectedKnights = getSelectedKnights();
+    // Проверяем количество
+    int count = 0;
+    for (int i = 0; i < totalKnights; ++i) {
+        if (selected[i]) count++;
+    }
     
-    if (selectedKnights.size() != static_cast<size_t>(requiredKnights)) {
-        std::cerr << "Error: selected " << selectedKnights.size() 
-                  << " knights instead of " << requiredKnights << std::endl;
+    if (count != requiredKnights) {
+        std::cerr << "Error: selected " << count << " knights, expected " << requiredKnights << std::endl;
         return false;
     }
     
-    for (size_t i = 0; i < selectedKnights.size(); ++i) {
-        for (size_t j = i + 1; j < selectedKnights.size(); ++j) {
-            int diff = std::abs(selectedKnights[i] - selectedKnights[j]);
-            int circularDiff = std::min(diff, totalKnights - diff);
-            
-            if (circularDiff == 1) {
-                std::cerr << "Error: knights " << selectedKnights[i] 
-                          << " and " << selectedKnights[j] << " are neighbors" << std::endl;
-                return false;
+    // Проверяем, что нет соседей
+    for (int i = 0; i < totalKnights; ++i) {
+        if (selected[i]) {
+            auto neighbors = getNeighbors(i);
+            for (int neighbor : neighbors) {
+                if (selected[neighbor]) {
+                    std::cerr << "Error: knights " << i << " and " << neighbor << " are neighbors" << std::endl;
+                    return false;
+                }
             }
         }
     }
