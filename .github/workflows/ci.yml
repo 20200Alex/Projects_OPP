@@ -7,6 +7,147 @@ on:
     branches: [ main ]
 
 jobs:
+  build-test-book-analyzer:
+    runs-on: ubuntu-22.04
+    name: Build and Test Book Analyzer (OpenMP)
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake \
+          g++ \
+          build-essential \
+          libomp-dev \
+          libgtest-dev
+          
+    - name: Build Google Test if needed
+      run: |
+        if [ ! -f "/usr/lib/libgtest.a" ] && [ ! -f "/usr/lib/x86_64-linux-gnu/libgtest.a" ]; then
+          echo "Building Google Test from source..."
+          sudo mkdir -p /usr/src/gtest
+          cd /usr/src/gtest
+          sudo cmake /usr/src/googletest
+          sudo make
+          sudo find . -name "*.a" -exec cp {} /usr/lib \;
+          cd -
+        fi
+        
+    - name: Configure and build Book Analyzer
+      run: |
+        echo "Configuring CMake for Book Analyzer (OpenMP)..."
+        mkdir -p build_book_analyzer
+        cd build_book_analyzer
+        
+        # Используем упрощенный CMakeLists.txt для быстрой сборки
+        cat > CMakeLists.txt << 'EOF'
+cmake_minimum_required(VERSION 3.10)
+project(BookAnalyzerTest VERSION 1.0.0 LANGUAGES CXX)
+
+# Найти OpenMP
+find_package(OpenMP REQUIRED)
+
+# Настройки компиляции
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Флаги компиляции
+add_compile_options(-Wall -Wextra)
+if(OpenMP_CXX_FOUND)
+    add_compile_options(${OpenMP_CXX_FLAGS})
+endif()
+
+# Основное приложение
+add_executable(book_analysis
+    ../part2-openmp/src/main.cpp
+    ../part2-openmp/src/book_analyzer.cpp
+)
+
+target_include_directories(book_analysis
+    PRIVATE
+        ../part2-openmp/src
+)
+
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(book_analysis OpenMP::OpenMP_CXX)
+endif()
+
+# Тесты
+enable_testing()
+
+find_package(GTest QUIET)
+if(GTest_FOUND)
+    add_executable(book_analysis_tests
+        ../part2-openmp/tests/test_book_analyzer.cpp
+        ../part2-openmp/src/book_analyzer.cpp
+    )
+    
+    target_include_directories(book_analysis_tests
+        PRIVATE
+            ../part2-openmp/src
+    )
+    
+    target_link_libraries(book_analysis_tests
+        GTest::gtest
+        GTest::gtest_main
+    )
+    
+    if(OpenMP_CXX_FOUND)
+        target_link_libraries(book_analysis_tests OpenMP::OpenMP_CXX)
+    endif()
+    
+    add_test(NAME BookAnalysisTests
+        COMMAND book_analysis_tests
+    )
+endif()
+EOF
+        
+        echo "Building project..."
+        cmake . -DBUILD_TESTS=ON
+        make -j$(nproc)
+        
+        echo "Checking built files..."
+        ls -la
+        
+    - name: Run Book Analyzer tests
+      run: |
+        cd build_book_analyzer
+        
+        echo "Looking for test executables..."
+        if [ -f "book_analysis_tests" ]; then
+          echo "Found: ./book_analysis_tests"
+          ./book_analysis_tests --gtest_color=yes --gtest_brief=1
+        else
+          echo "ERROR: Test executable not found!"
+          echo "Available files:"
+          find . -type f -executable
+          exit 1
+        fi
+        
+    - name: Test basic functionality
+      run: |
+        cd build_book_analyzer
+        echo "Testing basic functionality..."
+        
+        # Создаем тестовый файл с русским текстом
+        cat > test_russian.txt << 'EOF'
+Это тестовый текст на русском языке.
+Он содержит различные русские буквы: Аа Бб Вв Гг Дд Ее Ёё Жж Зз Ии Йй Кк Лл Мм Нн Оо Пп Рр Сс Тт Уу Фф Хх Цц Чч Шш Щщ Ъъ Ыы Ьь Ээ Юю Яя.
+Алексей Фёдорович Карамазов был третьим сыном помещика нашего уезда.
+EOF
+        
+        if [ -f "book_analysis" ]; then
+          echo "Running book analysis on test file..."
+          timeout 10s ./book_analysis test_russian.txt 1 || echo "Analysis completed"
+        else
+          echo "WARNING: Main application not found"
+        fi
+
   part1-threads:
     runs-on: ubuntu-22.04
     name: Part 1 - Threads (Knight Selection)
@@ -22,15 +163,15 @@ jobs:
           cmake \
           g++ \
           build-essential \
-          libgtest-dev \
-          libgmock-dev
+          libgtest-dev
           
     - name: Build Google Test if needed
       run: |
         if [ ! -f "/usr/lib/libgtest.a" ] && [ ! -f "/usr/lib/x86_64-linux-gnu/libgtest.a" ]; then
           echo "Building Google Test from source..."
+          sudo mkdir -p /usr/src/gtest
           cd /usr/src/gtest
-          sudo cmake CMakeLists.txt
+          sudo cmake /usr/src/googletest
           sudo make
           sudo find . -name "*.a" -exec cp {} /usr/lib \;
           cd -
@@ -42,10 +183,63 @@ jobs:
         mkdir -p build_part1
         cd build_part1
         
-        # Указываем правильный путь к CMakeLists.txt в part1-threads
-        cmake ../part1-threads -DBUILD_TESTS=ON
+        # Упрощенный CMakeLists.txt для части 1
+        cat > CMakeLists.txt << 'EOF'
+cmake_minimum_required(VERSION 3.10)
+project(KnightSelection VERSION 1.0.0 LANGUAGES CXX)
+
+# Настройки компиляции
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Флаги компиляции
+add_compile_options(-Wall -Wextra -pthread)
+
+# Основное приложение
+add_executable(KnightSelectionApp
+    ../part1-threads/src/main.cpp
+    ../part1-threads/src/KnightSelection.cpp
+)
+
+target_include_directories(KnightSelectionApp
+    PRIVATE
+        ../part1-threads/src
+)
+
+# Найти pthread
+find_package(Threads REQUIRED)
+target_link_libraries(KnightSelectionApp Threads::Threads)
+
+# Тесты
+enable_testing()
+
+find_package(GTest QUIET)
+if(GTest_FOUND)
+    add_executable(knight_selection_tests
+        ../part1-threads/tests/test_knight_selection.cpp
+        ../part1-threads/src/KnightSelection.cpp
+    )
+    
+    target_include_directories(knight_selection_tests
+        PRIVATE
+            ../part1-threads/src
+    )
+    
+    target_link_libraries(knight_selection_tests
+        GTest::gtest
+        GTest::gtest_main
+        Threads::Threads
+    )
+    
+    add_test(NAME KnightSelectionTests
+        COMMAND knight_selection_tests
+    )
+endif()
+EOF
         
         echo "Building project..."
+        cmake .
         make -j$(nproc)
         
         echo "Checking built files..."
@@ -56,13 +250,9 @@ jobs:
         cd build_part1
         
         echo "Looking for test executables..."
-        # Ищем тестовый файл
         if [ -f "knight_selection_tests" ]; then
           echo "Found: ./knight_selection_tests"
-          ./knight_selection_tests --gtest_color=yes --gtest_brief=1 || true
-        elif [ -f "tests/knight_selection_tests" ]; then
-          echo "Found: ./tests/knight_selection_tests"
-          ./tests/knight_selection_tests --gtest_color=yes --gtest_brief=1 || true
+          ./knight_selection_tests --gtest_color=yes --gtest_brief=1
         else
           echo "WARNING: Test executable not found!"
           echo "Directory structure:"
@@ -78,66 +268,7 @@ jobs:
         else
           echo "WARNING: Main application not found"
         fi
-        
-  part2-openmp:
-    runs-on: ubuntu-22.04
-    name: Part 2 - OpenMP (Numerical Integration)
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          cmake \
-          g++ \
-          build-essential \
-          libomp-dev \
-          libgtest-dev
-          
-    - name: Configure and build Part 2
-      run: |
-        echo "Configuring CMake for Part 2 (OpenMP)..."
-        mkdir -p build_part2
-        cd build_part2
-        
-        # Указываем правильный путь к CMakeLists.txt в part2-openmp
-        cmake ../part2-openmp -DBUILD_TESTS=ON
-        
-        echo "Building project..."
-        make -j$(nproc)
-        
-        echo "Checking built files..."
-        ls -la
-        
-    - name: Run tests for Part 2
-      run: |
-        cd build_part2
-        
-        echo "Looking for test executables..."
-        if [ -f "integral_tests" ]; then
-          echo "Found: ./integral_tests"
-          ./integral_tests --gtest_color=yes --gtest_brief=1 || true
-        elif [ -f "tests/integral_tests" ]; then
-          echo "Found: ./tests/integral_tests"
-          ./tests/integral_tests --gtest_color=yes --gtest_brief=1 || true
-        else
-          echo "WARNING: Test executable not found for Part 2"
-        fi
-        
-    - name: Run main application for Part 2
-      run: |
-        cd build_part2
-        if [ -f "integral_app" ]; then
-          echo "Running OpenMP integration application..."
-          # Запускаем с меньшим количеством сегментов для быстрого теста
-          timeout 10s ./integral_app 100000 1 2 || echo "Application completed or timed out"
-        else
-          echo "WARNING: OpenMP application not found"
-        fi
-        
+
   code-quality:
     runs-on: ubuntu-22.04
     name: Code Quality Analysis
@@ -149,119 +280,52 @@ jobs:
     - name: Install analysis tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y cppcheck
+        sudo apt-get install -y cppcheck clang-format
         
-    - name: Run static analysis for Part 1
+    - name: Check formatting for Book Analyzer
       run: |
-        echo "Running cppcheck for Part 1 (Threads)..."
-        if [ -d "part1-threads/src" ]; then
-          cppcheck \
-            --enable=warning,style,performance \
-            --suppress=missingIncludeSystem \
-            --error-exitcode=0 \
-            part1-threads/src/ 2>&1 | tee cppcheck_part1.log || true
-          
-          echo "=== Cppcheck summary for Part 1 ==="
-          grep -E "(error|warning|style):" cppcheck_part1.log | head -5 || true
-        else
-          echo "Part 1 source directory not found"
+        echo "Checking code formatting for Book Analyzer..."
+        if [ -f "part2-openmp/src/book_analyzer.cpp" ]; then
+          echo "Running clang-format check..."
+          clang-format --style=Google -n part2-openmp/src/*.cpp part2-openmp/src/*.h 2>&1 || true
         fi
         
-    - name: Run static analysis for Part 2
+    - name: Run static analysis for Book Analyzer
       run: |
-        echo "Running cppcheck for Part 2 (OpenMP)..."
+        echo "Running cppcheck for Book Analyzer..."
         if [ -d "part2-openmp/src" ]; then
           cppcheck \
             --enable=warning,style,performance \
             --suppress=missingIncludeSystem \
             --error-exitcode=0 \
-            part2-openmp/src/ 2>&1 | tee cppcheck_part2.log || true
+            part2-openmp/src/ 2>&1 | tee cppcheck_book_analyzer.log || true
           
-          echo "=== Cppcheck summary for Part 2 ==="
-          grep -E "(error|warning|style):" cppcheck_part2.log | head -5 || true
+          echo "=== Cppcheck summary for Book Analyzer ==="
+          grep -E "(error|warning|style):" cppcheck_book_analyzer.log | head -10 || true
         else
-          echo "Part 2 source directory not found"
+          echo "Book Analyzer source directory not found"
         fi
         
-  coverage:
-    runs-on: ubuntu-22.04
-    name: Code Coverage
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install coverage tools
+    - name: Run static analysis for Knight Selection
       run: |
-        sudo apt-get update
-        sudo apt-get install -y gcovr lcov
-        
-    - name: Build Part 1 with coverage
-      run: |
-        echo "Building Part 1 with coverage enabled..."
-        
-        # Переходим в директорию part1-threads
-        cd part1-threads
-        
-        mkdir -p coverage_build
-        cd coverage_build
-        
-        # Собираем с флагами покрытия
-        cmake .. \
-          -DBUILD_TESTS=ON \
-          -DCMAKE_BUILD_TYPE=Debug \
-          -DCMAKE_CXX_FLAGS="--coverage -fprofile-arcs -ftest-coverage"
-        
-        make -j$(nproc)
-        
-        echo "Build completed. Files:"
-        ls -la
-        
-    - name: Run tests for coverage
-      run: |
-        cd part1-threads/coverage_build
-        echo "Running tests for coverage..."
-        
-        # Ищем и запускаем тесты
-        if [ -f "knight_selection_tests" ]; then
-          ./knight_selection_tests --gtest_color=yes --gtest_brief=1 || true
-        elif [ -f "./tests/knight_selection_tests" ]; then
-          ./tests/knight_selection_tests --gtest_color=yes --gtest_brief=1 || true
+        echo "Running cppcheck for Knight Selection..."
+        if [ -d "part1-threads/src" ]; then
+          cppcheck \
+            --enable=warning,style,performance \
+            --suppress=missingIncludeSystem \
+            --error-exitcode=0 \
+            part1-threads/src/ 2>&1 | tee cppcheck_knight.log || true
+          
+          echo "=== Cppcheck summary for Knight Selection ==="
+          grep -E "(error|warning|style):" cppcheck_knight.log | head -10 || true
         else
-          echo "WARNING: Test executable not found for coverage"
+          echo "Knight Selection source directory not found"
         fi
-        
-    - name: Generate coverage report
-      run: |
-        cd part1-threads/coverage_build
-        echo "Generating coverage report..."
-        
-        # Генерируем отчет
-        gcovr \
-          --root .. \
-          --exclude=".*/tests/.*" \
-          --exclude=".*/coverage_build/.*" \
-          --html \
-          --html-details \
-          --output=coverage_report.html \
-          --print-summary || true
-        
-        echo "=== Coverage summary ==="
-        gcovr --root .. --exclude=".*/tests/.*" --exclude=".*/coverage_build/.*" --print-summary || true
-        
-    - name: Upload coverage report
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: coverage-report
-        path: |
-          part1-threads/coverage_build/coverage_report.html
-        if-no-files-found: warn
-        
+
   summary:
     runs-on: ubuntu-22.04
     name: Summary
-    needs: [part1-threads, part2-openmp, code-quality, coverage]
+    needs: [build-test-book-analyzer, part1-threads, code-quality]
     if: always()
     
     steps:
@@ -271,72 +335,33 @@ jobs:
         echo ""
         echo "Job Results:"
         echo "------------"
-        echo "Part 1 (Threads): ${{ needs.part1-threads.result }}"
-        echo "Part 2 (OpenMP): ${{ needs.part2-openmp.result }}"
+        echo "Book Analyzer (OpenMP): ${{ needs.build-test-book-analyzer.result }}"
+        echo "Knight Selection (Threads): ${{ needs.part1-threads.result }}"
         echo "Code Quality: ${{ needs.code-quality.result }}"
-        echo "Coverage: ${{ needs.coverage.result }}"
         echo ""
         echo "=========================================="
         
         # Определяем общий статус
+        if [[ "${{ needs.build-test-book-analyzer.result }}" == "success" ]]; then
+          echo "Book Analyzer: SUCCESS ✓"
+        else
+          echo "Book Analyzer: FAILED ✗"
+        fi
+        
         if [[ "${{ needs.part1-threads.result }}" == "success" ]]; then
-          echo "Part 1: SUCCESS"
+          echo "Knight Selection: SUCCESS ✓"
         else
-          echo "Part 1: FAILED"
+          echo "Knight Selection: FAILED ✗"
         fi
         
-        if [[ "${{ needs.part2-openmp.result }}" == "success" ]]; then
-          echo "Part 2: SUCCESS"
+        if [[ "${{ needs.code-quality.result }}" == "success" ]]; then
+          echo "Code Quality: PASSED ✓"
         else
-          echo "Part 2: ISSUES DETECTED"
-        fi
-          book-analyzer-tests:
-    runs-on: ubuntu-22.04
-    name: Part 2 - OpenMP Book Analyzer Tests
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          cmake \
-          g++ \
-          build-essential \
-          libomp-dev \
-          libgtest-dev
-          
-    - name: Build Google Test if needed
-      run: |
-        if [ ! -f "/usr/lib/libgtest.a" ] && [ ! -f "/usr/lib/x86_64-linux-gnu/libgtest.a" ]; then
-          echo "Building Google Test from source..."
-          cd /usr/src/gtest
-          sudo cmake CMakeLists.txt
-          sudo make
-          sudo find . -name "*.a" -exec cp {} /usr/lib \;
-          cd -
+          echo "Code Quality: WARNINGS ⚠"
         fi
         
-    - name: Configure and build book analyzer tests
-      run: |
-        echo "Configuring CMake for Book Analyzer..."
-        mkdir -p build_book_analyzer
-        cd build_book_analyzer
+        echo ""
+        echo "=== Detailed Status ==="
         
-        cmake ../part2-openmp -DBUILD_TESTS=ON
-        
-        echo "Building project..."
-        make -j$(nproc)
-        
-    - name: Run book analyzer tests
-      run: |
-        cd build_book_analyzer
-        if [ -f "book_analysis_tests" ]; then
-          echo "Running book analyzer tests..."
-          ./book_analysis_tests --gtest_color=yes --gtest_brief=1
-        else
-          echo "ERROR: Test executable not found!"
-          exit 1
-        fi
+        # Всегда выходим успешно для summary
+        exit 0
