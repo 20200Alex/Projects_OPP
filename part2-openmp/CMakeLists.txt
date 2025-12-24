@@ -33,6 +33,8 @@ target_include_directories(book_analysis
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+target_link_libraries(book_analysis OpenMP::OpenMP_CXX)
+
 if(BUILD_TESTS)
     enable_testing()
     
@@ -52,6 +54,7 @@ if(BUILD_TESTS)
         target_link_libraries(book_analysis_tests
             GTest::gtest
             GTest::gtest_main
+            OpenMP::OpenMP_CXX
         )
         
         add_test(NAME BookAnalysisTests
