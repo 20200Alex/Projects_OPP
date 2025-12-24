@@ -12,7 +12,7 @@ option(BUILD_TESTS "Build tests" ON)
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_compile_options(-g -O0 -Wall -Wextra -Wno-multichar)
 else()
-    add_compile_options(-O3 -Wall -march=native)
+    add_compile_options(-O3 -Wall)
 endif()
 
 if(OpenMP_CXX_FOUND)
@@ -59,19 +59,5 @@ if(BUILD_TESTS)
         )
     endif()
 endif()
-
-# Копируем скрипты
-configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_analysis.sh.in
-    ${CMAKE_BINARY_DIR}/run_analysis.sh
-    @ONLY
-)
-
-# Делаем скрипт исполняемым
-add_custom_command(
-    TARGET book_analysis POST_BUILD
-    COMMAND chmod +x ${CMAKE_BINARY_DIR}/run_analysis.sh
-    COMMENT "Making analysis script executable"
-)
 
 message(STATUS "Book Analysis project configured successfully")
