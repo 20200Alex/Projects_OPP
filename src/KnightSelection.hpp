@@ -24,9 +24,9 @@ private:
     const int totalKnights;
     const int requiredKnights;
     std::vector<bool> selected;
-    std::vector<bool> raisedHand;
+    std::vector<bool> handRaised;
     std::atomic<int> selectedCount;
-    std::atomic<bool> selectionFinished;
+    std::atomic<bool> stopFlag;
     
     mutable std::mutex mtx;
     std::condition_variable cv;
@@ -34,13 +34,11 @@ private:
     std::random_device rd;
     std::mt19937 gen;
     
-    void knightThread(int id);
+    void knightProcess(int id);
     
     bool canRaiseHand(int id) const;
     
     std::vector<int> getNeighbors(int id) const;
-    
-    int selectRandomAvailableKnight();
 };
 
 #endif
