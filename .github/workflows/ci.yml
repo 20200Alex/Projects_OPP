@@ -18,12 +18,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y \
-          cmake \
-          g++ \
-          build-essential \
-          libomp-dev \
-          libgtest-dev
+        sudo apt-get install -y cmake g++ build-essential libomp-dev libgtest-dev
           
     - name: Build Google Test if needed
       run: |
@@ -43,64 +38,62 @@ jobs:
         mkdir -p build_book_analyzer
         cd build_book_analyzer
         
-        # Создаем упрощенный CMakeLists.txt
-        cat > CMakeLists.txt << 'CMAKE_EOF'
-cmake_minimum_required(VERSION 3.10)
-project(BookAnalyzerTest VERSION 1.0.0 LANGUAGES CXX)
-
-find_package(OpenMP REQUIRED)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
-add_compile_options(-Wall -Wextra)
-if(OpenMP_CXX_FOUND)
-    add_compile_options(${OpenMP_CXX_FLAGS})
-endif()
-
-add_executable(book_analysis
-    ../part2-openmp/src/main.cpp
-    ../part2-openmp/src/book_analyzer.cpp
-)
-
-target_include_directories(book_analysis
-    PRIVATE
-        ../part2-openmp/src
-)
-
-if(OpenMP_CXX_FOUND)
-    target_link_libraries(book_analysis OpenMP::OpenMP_CXX)
-endif()
-
-enable_testing()
-
-find_package(GTest QUIET)
-if(GTest_FOUND)
-    add_executable(book_analysis_tests
-        ../part2-openmp/tests/test_book_analyzer.cpp
-        ../part2-openmp/src/book_analyzer.cpp
-    )
-    
-    target_include_directories(book_analysis_tests
-        PRIVATE
-            ../part2-openmp/src
-    )
-    
-    target_link_libraries(book_analysis_tests
-        GTest::gtest
-        GTest::gtest_main
-    )
-    
-    if(OpenMP_CXX_FOUND)
-        target_link_libraries(book_analysis_tests OpenMP::OpenMP_CXX)
-    endif()
-    
-    add_test(NAME BookAnalysisTests
-        COMMAND book_analysis_tests
-    )
-endif()
-CMAKE_EOF
+        # Создаем простой CMakeLists.txt без heredoc проблем
+        echo 'cmake_minimum_required(VERSION 3.10)' > CMakeLists.txt
+        echo 'project(BookAnalyzerTest VERSION 1.0.0 LANGUAGES CXX)' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'find_package(OpenMP REQUIRED)' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'set(CMAKE_CXX_STANDARD 17)' >> CMakeLists.txt
+        echo 'set(CMAKE_CXX_STANDARD_REQUIRED ON)' >> CMakeLists.txt
+        echo 'set(CMAKE_CXX_EXTENSIONS OFF)' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'add_compile_options(-Wall -Wextra)' >> CMakeLists.txt
+        echo 'if(OpenMP_CXX_FOUND)' >> CMakeLists.txt
+        echo '    add_compile_options(${OpenMP_CXX_FLAGS})' >> CMakeLists.txt
+        echo 'endif()' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'add_executable(book_analysis' >> CMakeLists.txt
+        echo '    ../part2-openmp/src/main.cpp' >> CMakeLists.txt
+        echo '    ../part2-openmp/src/book_analyzer.cpp' >> CMakeLists.txt
+        echo ')' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'target_include_directories(book_analysis' >> CMakeLists.txt
+        echo '    PRIVATE' >> CMakeLists.txt
+        echo '        ../part2-openmp/src' >> CMakeLists.txt
+        echo ')' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'if(OpenMP_CXX_FOUND)' >> CMakeLists.txt
+        echo '    target_link_libraries(book_analysis OpenMP::OpenMP_CXX)' >> CMakeLists.txt
+        echo 'endif()' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'enable_testing()' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'find_package(GTest QUIET)' >> CMakeLists.txt
+        echo 'if(GTest_FOUND)' >> CMakeLists.txt
+        echo '    add_executable(book_analysis_tests' >> CMakeLists.txt
+        echo '        ../part2-openmp/tests/test_book_analyzer.cpp' >> CMakeLists.txt
+        echo '        ../part2-openmp/src/book_analyzer.cpp' >> CMakeLists.txt
+        echo '    )' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo '    target_include_directories(book_analysis_tests' >> CMakeLists.txt
+        echo '        PRIVATE' >> CMakeLists.txt
+        echo '            ../part2-openmp/src' >> CMakeLists.txt
+        echo '    )' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo '    target_link_libraries(book_analysis_tests' >> CMakeLists.txt
+        echo '        GTest::gtest' >> CMakeLists.txt
+        echo '        GTest::gtest_main' >> CMakeLists.txt
+        echo '    )' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo '    if(OpenMP_CXX_FOUND)' >> CMakeLists.txt
+        echo '        target_link_libraries(book_analysis_tests OpenMP::OpenMP_CXX)' >> CMakeLists.txt
+        echo '    endif()' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo '    add_test(NAME BookAnalysisTests' >> CMakeLists.txt
+        echo '        COMMAND book_analysis_tests' >> CMakeLists.txt
+        echo '    )' >> CMakeLists.txt
+        echo 'endif()' >> CMakeLists.txt
         
         echo "Building project..."
         cmake . -DBUILD_TESTS=ON
@@ -129,11 +122,9 @@ CMAKE_EOF
         cd build_book_analyzer
         echo "Testing basic functionality..."
         
-        cat > test_russian.txt << 'TEXT_EOF'
-Это тестовый текст на русском языке.
-Он содержит различные русские буквы.
-Алексей Фёдорович Карамазов был третьим сыном помещика нашего уезда.
-TEXT_EOF
+        echo 'Это тестовый текст на русском языке.' > test_russian.txt
+        echo 'Он содержит различные русские буквы.' >> test_russian.txt
+        echo 'Алексей Фёдорович Карамазов был третьим сыном помещика нашего уезда.' >> test_russian.txt
         
         if [ -f "book_analysis" ]; then
           echo "Running book analysis on test file..."
@@ -153,11 +144,7 @@ TEXT_EOF
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y \
-          cmake \
-          g++ \
-          build-essential \
-          libgtest-dev
+        sudo apt-get install -y cmake g++ build-essential libgtest-dev
           
     - name: Build Google Test if needed
       run: |
@@ -177,54 +164,53 @@ TEXT_EOF
         mkdir -p build_part1
         cd build_part1
         
-        cat > CMakeLists.txt << 'CMAKE_EOF'
-cmake_minimum_required(VERSION 3.10)
-project(KnightSelection VERSION 1.0.0 LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
-add_compile_options(-Wall -Wextra -pthread)
-
-add_executable(KnightSelectionApp
-    ../part1-threads/src/main.cpp
-    ../part1-threads/src/KnightSelection.cpp
-)
-
-target_include_directories(KnightSelectionApp
-    PRIVATE
-        ../part1-threads/src
-)
-
-find_package(Threads REQUIRED)
-target_link_libraries(KnightSelectionApp Threads::Threads)
-
-enable_testing()
-
-find_package(GTest QUIET)
-if(GTest_FOUND)
-    add_executable(knight_selection_tests
-        ../part1-threads/tests/test_knight_selection.cpp
-        ../part1-threads/src/KnightSelection.cpp
-    )
-    
-    target_include_directories(knight_selection_tests
-        PRIVATE
-            ../part1-threads/src
-    )
-    
-    target_link_libraries(knight_selection_tests
-        GTest::gtest
-        GTest::gtest_main
-        Threads::Threads
-    )
-    
-    add_test(NAME KnightSelectionTests
-        COMMAND knight_selection_tests
-    )
-endif()
-CMAKE_EOF
+        # Создаем CMakeLists.txt без heredoc
+        echo 'cmake_minimum_required(VERSION 3.10)' > CMakeLists.txt
+        echo 'project(KnightSelection VERSION 1.0.0 LANGUAGES CXX)' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'set(CMAKE_CXX_STANDARD 17)' >> CMakeLists.txt
+        echo 'set(CMAKE_CXX_STANDARD_REQUIRED ON)' >> CMakeLists.txt
+        echo 'set(CMAKE_CXX_EXTENSIONS OFF)' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'add_compile_options(-Wall -Wextra -pthread)' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'add_executable(KnightSelectionApp' >> CMakeLists.txt
+        echo '    ../part1-threads/src/main.cpp' >> CMakeLists.txt
+        echo '    ../part1-threads/src/KnightSelection.cpp' >> CMakeLists.txt
+        echo ')' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'target_include_directories(KnightSelectionApp' >> CMakeLists.txt
+        echo '    PRIVATE' >> CMakeLists.txt
+        echo '        ../part1-threads/src' >> CMakeLists.txt
+        echo ')' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'find_package(Threads REQUIRED)' >> CMakeLists.txt
+        echo 'target_link_libraries(KnightSelectionApp Threads::Threads)' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'enable_testing()' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo 'find_package(GTest QUIET)' >> CMakeLists.txt
+        echo 'if(GTest_FOUND)' >> CMakeLists.txt
+        echo '    add_executable(knight_selection_tests' >> CMakeLists.txt
+        echo '        ../part1-threads/tests/test_knight_selection.cpp' >> CMakeLists.txt
+        echo '        ../part1-threads/src/KnightSelection.cpp' >> CMakeLists.txt
+        echo '    )' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo '    target_include_directories(knight_selection_tests' >> CMakeLists.txt
+        echo '        PRIVATE' >> CMakeLists.txt
+        echo '            ../part1-threads/src' >> CMakeLists.txt
+        echo '    )' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo '    target_link_libraries(knight_selection_tests' >> CMakeLists.txt
+        echo '        GTest::gtest' >> CMakeLists.txt
+        echo '        GTest::gtest_main' >> CMakeLists.txt
+        echo '        Threads::Threads' >> CMakeLists.txt
+        echo '    )' >> CMakeLists.txt
+        echo '' >> CMakeLists.txt
+        echo '    add_test(NAME KnightSelectionTests' >> CMakeLists.txt
+        echo '        COMMAND knight_selection_tests' >> CMakeLists.txt
+        echo '    )' >> CMakeLists.txt
+        echo 'endif()' >> CMakeLists.txt
         
         echo "Building project..."
         cmake .
@@ -281,12 +267,7 @@ CMAKE_EOF
       run: |
         echo "Running cppcheck for Book Analyzer..."
         if [ -d "part2-openmp/src" ]; then
-          cppcheck \
-            --enable=warning,style,performance \
-            --suppress=missingIncludeSystem \
-            --error-exitcode=0 \
-            part2-openmp/src/ 2>&1 | tee cppcheck_book_analyzer.log || true
-          
+          cppcheck --enable=warning,style,performance --suppress=missingIncludeSystem --error-exitcode=0 part2-openmp/src/ 2>&1 | tee cppcheck_book_analyzer.log || true
           echo "=== Cppcheck summary for Book Analyzer ==="
           grep -E "(error|warning|style):" cppcheck_book_analyzer.log | head -10 || true
         else
@@ -297,12 +278,7 @@ CMAKE_EOF
       run: |
         echo "Running cppcheck for Knight Selection..."
         if [ -d "part1-threads/src" ]; then
-          cppcheck \
-            --enable=warning,style,performance \
-            --suppress=missingIncludeSystem \
-            --error-exitcode=0 \
-            part1-threads/src/ 2>&1 | tee cppcheck_knight.log || true
-          
+          cppcheck --enable=warning,style,performance --suppress=missingIncludeSystem --error-exitcode=0 part1-threads/src/ 2>&1 | tee cppcheck_knight.log || true
           echo "=== Cppcheck summary for Knight Selection ==="
           grep -E "(error|warning|style):" cppcheck_knight.log | head -10 || true
         else
