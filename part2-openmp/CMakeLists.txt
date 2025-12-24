@@ -23,6 +23,9 @@ else()
     message(FATAL_ERROR "OpenMP not found")
 endif()
 
+# Создаем директорию data если ее нет
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/data)
+
 add_executable(book_analysis
     src/main.cpp
     src/book_analyzer.cpp
@@ -34,6 +37,14 @@ target_include_directories(book_analysis
 )
 
 target_link_libraries(book_analysis OpenMP::OpenMP_CXX)
+
+# Копируем тестовый файл книги если он существует
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/data/karamazov.txt)
+    message(STATUS "Found book file: data/karamazov.txt")
+else()
+    message(STATUS "Creating sample book file...")
+    file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/data/karamazov.txt "Братья Карамазовы\nФёдор Достоевский\n\nОтрывок из книги для тестирования анализатора частот русских букв.\n")
+endif()
 
 if(BUILD_TESTS)
     enable_testing()
@@ -62,5 +73,14 @@ if(BUILD_TESTS)
         )
     endif()
 endif()
+
+# Установочные цели
+install(TARGETS book_analysis
+    RUNTIME DESTINATION bin
+)
+
+install(DIRECTORY data/
+    DESTINATION share/book_analysis
+)
 
 message(STATUS "Book Analysis project configured successfully")
