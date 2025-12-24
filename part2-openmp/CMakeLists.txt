@@ -12,7 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Опции для этой части
 option(BUILD_TESTS "Build tests for Part 2" ON)
 option(ENABLE_COVERAGE "Enable code coverage" OFF)
-option(GENERATE_PLOTS "Generate plots with Python" ON)
+option(GENERATE_PLOTS "Generate plots with Python" OFF)  # Отключаем по умолчанию
 
 # Настройки вывода
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
@@ -38,7 +38,6 @@ endif()
 if(OpenMP_CXX_FOUND)
     message(STATUS "Part 2: OpenMP found")
     add_compile_options(${OpenMP_CXX_FLAGS})
-    # Для современных версий CMake используем target_link_libraries
 else()
     message(FATAL_ERROR "Part 2: OpenMP not found! Install: sudo apt-get install libomp-dev")
 endif()
@@ -114,35 +113,56 @@ endif()
 
 # Генерация скриптов для графиков
 if(GENERATE_PLOTS)
-    # Копируем Python скрипт в билд директорию
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/scripts)
+        # Копируем Python скрипт в билд директорию
+        configure_file(
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/plot_results.py.in
+            ${CMAKE_BINARY_DIR}/plot_results.py
+            @ONLY
+        )
+        
+        # Создаем цель для генерации графиков
+        add_custom_target(generate_plots
+            COMMAND ${CMAKE_COMMAND} -E echo "Generating plots..."
+            COMMAND cd ${CMAKE_BINARY_DIR} && python3 plot_results.py || echo "Python script executed"
+            DEPENDS integral_app
+            COMMENT "Generating performance plots"
+        )
+    else()
+        message(STATUS "Part 2: scripts directory not found, plot generation disabled")
+        set(GENERATE_PLOTS OFF)
+    endif()
+endif()
+
+# Скрипт для бенчмарков 
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_benchmark.sh.in)
     configure_file(
-        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/plot_results.py.in
-        ${CMAKE_BINARY_DIR}/plot_results.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_benchmark.sh.in
+        ${CMAKE_BINARY_DIR}/run_benchmark.sh
         @ONLY
     )
     
-    # Создаем цель для генерации графиков
-    add_custom_target(generate_plots
-        COMMAND ${CMAKE_COMMAND} -E echo "Generating plots..."
-        COMMAND cd ${CMAKE_BINARY_DIR} && python3 plot_results.py || echo "Python script executed"
-        DEPENDS integral_app
-        COMMENT "Generating performance plots"
+    # Делаем скрипт исполняемым
+    add_custom_command(
+        TARGET integral_app POST_BUILD
+        COMMAND chmod +x ${CMAKE_BINARY_DIR}/run_benchmark.sh
+        COMMENT "Making benchmark script executable"
+    )
+else()
+    # Создаем простой скрипт для бенчмарков
+    file(WRITE ${CMAKE_BINARY_DIR}/run_simple_test.sh
+        "#!/bin/bash\n"
+        "echo 'Running simple OpenMP test...'\n"
+        "./integral_app 1000000 1 2 4\n"
+        "echo 'Test completed'\n"
+    )
+    
+    add_custom_command(
+        TARGET integral_app POST_BUILD
+        COMMAND chmod +x ${CMAKE_BINARY_DIR}/run_simple_test.sh
+        COMMENT "Creating simple test script"
     )
 endif()
-
-# Скрипт для бенчмарков
-configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/run_benchmark.sh.in
-    ${CMAKE_BINARY_DIR}/run_benchmark.sh
-    @ONLY
-)
-
-# Делаем скрипт исполняемым
-add_custom_command(
-    TARGET integral_app POST_BUILD
-    COMMAND chmod +x ${CMAKE_BINARY_DIR}/run_benchmark.sh
-    COMMENT "Making benchmark script executable"
-)
 
 # Установка
 install(TARGETS integral_app
