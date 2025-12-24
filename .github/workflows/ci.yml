@@ -1,0 +1,96 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, coder, tester ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake g++ libgtest-dev
+        
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DBUILD_TESTS=ON
+        
+    - name: Build project
+      run: |
+        cd build
+        make -j4
+        
+    - name: Run tests
+      run: |
+        cd build
+        ctest --output-on-failure
+        
+    - name: Run main application
+      run: |
+        cd build
+        ./KnightSelectionApp
+        
+  code-quality:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Check for memory leaks (Valgrind)
+      run: |
+        sudo apt-get install -y valgrind
+        mkdir build
+        cd build
+        cmake .. -DBUILD_TESTS=ON
+        make -j4
+        valgrind --leak-check=full --error-exitcode=1 ./tests/knight_selection_tests
+        
+    - name: Static analysis (Cppcheck)
+      run: |
+        sudo apt-get install -y cppcheck
+        cppcheck --enable=all --suppress=missingIncludeSystem src/ tests/
+        
+  coverage:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Install coverage tools
+      run: |
+        sudo apt-get install -y gcovr lcov
+        
+    - name: Build with coverage
+      run: |
+        mkdir build
+        cd build
+        cmake .. -DBUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="--coverage"
+        make -j4
+        
+    - name: Run tests with coverage
+      run: |
+        cd build
+        ./tests/knight_selection_tests
+        
+    - name: Generate coverage report
+      run: |
+        cd build
+        gcovr --root .. --exclude tests/ --html-details coverage_report.html
+        
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-report
+        path: build/coverage_report.html
