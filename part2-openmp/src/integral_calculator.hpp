@@ -5,6 +5,7 @@
 #include <functional>
 #include <string>
 #include <chrono>
+#include <omp.h>
 
 /**
  * @class IntegralCalculator
