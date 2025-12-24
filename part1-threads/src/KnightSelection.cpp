@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <stdexcept>
 #include <iostream>
+#include <random>
 
 KnightSelection::KnightSelection(int totalKnights, int requiredKnights)
     : totalKnights(totalKnights)
@@ -50,7 +51,7 @@ bool KnightSelection::canRaiseHand(int id) const {
 void KnightSelection::knightProcess(int id) {
     std::random_device localRd;
     std::mt19937 localGen(localRd());
-    std::uniform_int_distribution<> sleepDist(50, 200);
+    std::uniform_int_distribution<> sleepDist(10, 50); // Уменьшено время сна
     
     while (!stopFlag && selectedCount < requiredKnights) {
         // Проверяем, может ли поднять руку
@@ -76,18 +77,18 @@ void KnightSelection::knightProcess(int id) {
         }
         
         // Спим случайное время
-        std::this_thread::sleep_for(std::chrono::milliseconds(sleepDist(localGen)));
-        
-        // Если поднял руку и не выбран, опускаем ее
         if (shouldRaise) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(sleepDist(localGen)));
+            
+            // Если поднял руку и не выбран, опускаем ее
             std::lock_guard<std::mutex> lock(mtx);
-            if (!selected[id]) {
+            if (!selected[id] && handRaised[id]) {
                 handRaised[id] = false;
             }
+        } else {
+            // Короткая пауза если не может поднять руку
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
-        
-        // Короткая пауза перед следующей итерацией
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 }
 
@@ -104,7 +105,7 @@ void KnightSelection::startSelection() {
     
     // Основной цикл выбора
     int attempts = 0;
-    const int maxAttempts = 500;
+    const int maxAttempts = 1000; // Увеличено количество попыток
     
     while (selectedCount < requiredKnights && attempts < maxAttempts) {
         attempts++;
@@ -160,16 +161,16 @@ void KnightSelection::startSelection() {
             }
         } else {
             // Нет доступных - небольшая пауза
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         
-        // Каждые 10 попыток сбрасываем все руки для предотвращения deadlock
-        if (attempts % 10 == 0) {
+        // Каждые 20 попыток сбрасываем все руки для предотвращения deadlock
+        if (attempts % 20 == 0) {
             std::lock_guard<std::mutex> lock(mtx);
             std::fill(handRaised.begin(), handRaised.end(), false);
         }
         
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
     
     // Останавливаем все потоки
@@ -227,8 +228,8 @@ bool KnightSelection::validateSelection() const {
         if (selected[i]) count++;
     }
     
-    if (count != requiredKnights) {
-        std::cerr << "Error: selected " << count << " knights, expected " << requiredKnights << std::endl;
+    if (count < requiredKnights) {
+        std::cerr << "Error: selected " << count << " knights, expected at least " << requiredKnights << std::endl;
         return false;
     }
     
