@@ -6,6 +6,8 @@
 #include <iostream>
 #include <algorithm>
 #include <omp.h>
+#include <cstdio>
+#include <random>
 
 BookAnalyzer::BookAnalyzer() {}
 
@@ -52,8 +54,10 @@ bool BookAnalyzer::isRussianLetterUTF8(const unsigned char* bytes, size_t& pos, 
 // Получение русской буквы из UTF-8
 std::string BookAnalyzer::getRussianLetterUTF8(const unsigned char* bytes, size_t pos) {
     std::string letter;
-    letter += static_cast<char>(bytes[pos]);
-    letter += static_cast<char>(bytes[pos + 1]);
+    if (pos + 1 < std::string::npos) {
+        letter += static_cast<char>(bytes[pos]);
+        letter += static_cast<char>(bytes[pos + 1]);
+    }
     return letter;
 }
 
@@ -126,21 +130,18 @@ BookAnalyzer::AnalysisResult BookAnalyzer::analyzeTextImpl(
         int threadId = omp_get_thread_num();
         auto& threadMap = localFreq[threadId];
         
-        #pragma omp for schedule(dynamic, 4096)  // Большие блоки для эффективности
-        for (size_t i = 0; i < length; ) {
-            size_t originalPos = i;
-            
-            if (isRussianLetterUTF8(data, i, length)) {
-                std::string letter = getRussianLetterUTF8(data, originalPos);
+        #pragma omp for schedule(dynamic, 4096)
+        for (size_t i = 0; i < length; i++) {
+            size_t pos = i;
+            if (isRussianLetterUTF8(data, pos, length)) {
+                std::string letter = getRussianLetterUTF8(data, i);
                 std::string lowerLetter = toLowerRussianUTF8(letter);
                 
                 threadMap[lowerLetter]++;
                 totalLetters++;
-            } else {
-                // Если не русская буква, продвигаемся на 1 байт
-                if (i == originalPos) {
-                    i++;
-                }
+                
+                // Пропускаем второй байт UTF-8
+                i++;  // Увеличиваем i, так как русская буква занимает 2 байта
             }
         }
     }
@@ -165,9 +166,9 @@ BookAnalyzer::AnalysisResult BookAnalyzer::analyzeTextImpl(
         threads,
         totalLetters,
         static_cast<int>(length),
-        1.0,  // Ускорение будет вычислено позже
-        {},   // История ускорений
-        {}    // История потоков
+        1.0,
+        {},
+        {}
     };
 }
 
@@ -221,11 +222,13 @@ std::vector<BookAnalyzer::AnalysisResult> BookAnalyzer::benchmarkThreads(
     std::cout << std::endl;
     
     try {
+        std::string text = readFileToString(filename);
+        
         for (int threads : threadConfigs) {
             std::cout << "\nRunning with " << threads << " thread(s)..." << std::endl;
             
             auto start = std::chrono::high_resolution_clock::now();
-            auto result = analyzeFile(filename, threads);
+            auto result = analyzeText(text, threads);
             auto end = std::chrono::high_resolution_clock::now();
             
             auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -264,7 +267,7 @@ std::vector<BookAnalyzer::AnalysisResult> BookAnalyzer::benchmarkThreads(
         
         // Создаем большой тестовый текст
         std::string testText;
-        for (int i = 0; i < 100000; ++i) {
+        for (int i = 0; i < 10000; ++i) {
             testText += "Алексей Фёдорович Карамазов был третьим сыном помещика нашего уезда. ";
         }
         
@@ -353,239 +356,109 @@ void BookAnalyzer::saveBenchmarkCSV(
 
 // Генерация скрипта для построения графиков ускорения
 void BookAnalyzer::generatePlotScript(const std::vector<AnalysisResult>& benchmarkResults) {
-    std::string script = R"(#!/usr/bin/env python3
-import matplotlib.pyplot as plt
-import numpy as np
-import csv
-import os
-
-print("=== Generating OpenMP Performance Plots ===")
-
-# Чтение данных бенчмарка
-threads = []
-times = []
-speedups = []
-efficiencies = []
-
-try:
-    with open('benchmark_results.csv', 'r') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            threads.append(int(row['threads']))
-            times.append(float(row['time_ms']))
-            speedups.append(float(row['speedup']))
-            efficiencies.append(float(row['efficiency']))
-except FileNotFoundError:
-    print("ERROR: benchmark_results.csv not found!")
-    print("Using sample data for demonstration")
-    threads = [1, 2, 4, 8, 16]
-    times = [1000, 520, 270, 145, 85]
-    speedups = [1.0, 1.92, 3.70, 6.90, 11.76]
-    efficiencies = [100.0, 96.0, 92.5, 86.3, 73.5]
-
-# Чтение частот букв
-letter_freq = {}
-try:
-    with open('letter_frequencies.csv', 'r') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            if row['frequency'].isdigit():
-                letter_freq[row['letter']] = int(row['frequency'])
-except FileNotFoundError:
-    print("WARNING: letter_frequencies.csv not found")
-
-# Создаем фигуру с несколькими графиками
-fig = plt.figure(figsize=(15, 10))
-
-# График 1: Ускорение
-ax1 = plt.subplot(2, 2, 1)
-ax1.plot(threads, speedups, 'bo-', linewidth=2, markersize=8, label='Actual speedup')
-ax1.plot(threads, threads, 'r--', linewidth=2, label='Linear speedup (ideal)')
-ax1.set_xlabel('Number of Threads', fontsize=12)
-ax1.set_ylabel('Speedup', fontsize=12)
-ax1.set_title('OpenMP Speedup: Russian Text Analysis', fontsize=14, fontweight='bold')
-ax1.grid(True, alpha=0.3)
-ax1.legend()
-ax1.set_xticks(threads)
-
-# График 2: Эффективность
-ax2 = plt.subplot(2, 2, 2)
-ax2.plot(threads, efficiencies, 'go-', linewidth=2, markersize=8)
-ax2.axhline(y=100, color='r', linestyle='--', alpha=0.5, label='Ideal (100%)')
-ax2.set_xlabel('Number of Threads', fontsize=12)
-ax2.set_ylabel('Efficiency (%)', fontsize=12)
-ax2.set_title('Parallel Efficiency', fontsize=14, fontweight='bold')
-ax2.grid(True, alpha=0.3)
-ax2.legend()
-ax2.set_xticks(threads)
-ax2.set_ylim([0, 110])
-
-# График 3: Время выполнения
-ax3 = plt.subplot(2, 2, 3)
-ax3.plot(threads, times, 'ro-', linewidth=2, markersize=8)
-ax3.set_xlabel('Number of Threads', fontsize=12)
-ax3.set_ylabel('Execution Time (ms)', fontsize=12)
-ax3.set_title('Execution Time vs Threads', fontsize=14, fontweight='bold')
-ax3.grid(True, alpha=0.3)
-ax3.set_xticks(threads)
-
-# График 4: Частоты букв (если есть данные)
-ax4 = plt.subplot(2, 2, 4)
-if letter_freq:
-    letters = list(letter_freq.keys())[:15]  # Топ-15 букв
-    frequencies = [letter_freq[l] for l in letters]
+    // Упрощенный Python скрипт без проблем с raw string
+    std::string script;
+    script += "#!/usr/bin/env python3\n";
+    script += "import matplotlib.pyplot as plt\n";
+    script += "import numpy as np\n";
+    script += "import csv\n\n";
+    script += "print('=== Generating OpenMP Performance Plots ===')\n\n";
+    script += "# Чтение данных бенчмарка\n";
+    script += "threads = []\n";
+    script += "times = []\n";
+    script += "speedups = []\n";
+    script += "efficiencies = []\n\n";
+    script += "try:\n";
+    script += "    with open('benchmark_results.csv', 'r') as f:\n";
+    script += "        reader = csv.DictReader(f)\n";
+    script += "        for row in reader:\n";
+    script += "            threads.append(int(row['threads']))\n";
+    script += "            times.append(float(row['time_ms']))\n";
+    script += "            speedups.append(float(row['speedup']))\n";
+    script += "            efficiencies.append(float(row['efficiency']))\n";
+    script += "except FileNotFoundError:\n";
+    script += "    print('ERROR: benchmark_results.csv not found!')\n";
+    script += "    print('Using sample data for demonstration')\n";
+    script += "    threads = [1, 2, 4, 8]\n";
+    script += "    times = [1000, 520, 270, 145]\n";
+    script += "    speedups = [1.0, 1.92, 3.70, 6.90]\n";
+    script += "    efficiencies = [100.0, 96.0, 92.5, 86.3]\n\n";
+    script += "# Создаем фигуру с графиками\n";
+    script += "fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 10))\n\n";
+    script += "# График 1: Ускорение\n";
+    script += "ax1.plot(threads, speedups, 'bo-', linewidth=2, markersize=8, label='Actual speedup')\n";
+    script += "ax1.plot(threads, threads, 'r--', linewidth=2, label='Linear speedup (ideal)')\n";
+    script += "ax1.set_xlabel('Number of Threads')\n";
+    script += "ax1.set_ylabel('Speedup')\n";
+    script += "ax1.set_title('OpenMP Speedup: Russian Text Analysis')\n";
+    script += "ax1.grid(True, alpha=0.3)\n";
+    script += "ax1.legend()\n";
+    script += "ax1.set_xticks(threads)\n\n";
+    script += "# График 2: Эффективность\n";
+    script += "ax2.plot(threads, efficiencies, 'go-', linewidth=2, markersize=8)\n";
+    script += "ax2.axhline(y=100, color='r', linestyle='--', alpha=0.5, label='Ideal (100%)')\n";
+    script += "ax2.set_xlabel('Number of Threads')\n";
+    script += "ax2.set_ylabel('Efficiency (%)')\n";
+    script += "ax2.set_title('Parallel Efficiency')\n";
+    script += "ax2.grid(True, alpha=0.3)\n";
+    script += "ax2.legend()\n";
+    script += "ax2.set_xticks(threads)\n";
+    script += "ax2.set_ylim([0, 110])\n\n";
+    script += "# График 3: Время выполнения\n";
+    script += "ax3.plot(threads, times, 'ro-', linewidth=2, markersize=8)\n";
+    script += "ax3.set_xlabel('Number of Threads')\n";
+    script += "ax3.set_ylabel('Execution Time (ms)')\n";
+    script += "ax3.set_title('Execution Time vs Threads')\n";
+    script += "ax3.grid(True, alpha=0.3)\n";
+    script += "ax3.set_xticks(threads)\n\n";
+    script += "# График 4: Placeholder\n";
+    script += "ax4.text(0.5, 0.5, 'Run full analysis to generate\\nfrequency plot',\n";
+    script += "        ha='center', va='center', transform=ax4.transAxes)\n";
+    script += "ax4.set_title('Letter Frequency Analysis')\n";
+    script += "ax4.axis('off')\n\n";
+    script += "plt.tight_layout()\n";
+    script += "plt.savefig('openmp_performance_analysis.png', dpi=150)\n";
+    script += "print('\\nPlot saved: openmp_performance_analysis.png')\n";
     
-    # Для русских букв в UTF-8
-    bars = ax4.bar(range(len(letters)), frequencies, color='skyblue', alpha=0.7)
-    ax4.set_xlabel('Russian Letters', fontsize=12)
-    ax4.set_ylabel('Frequency', fontsize=12)
-    ax4.set_title('Top 15 Most Frequent Letters', fontsize=14, fontweight='bold')
-    ax4.set_xticks(range(len(letters)))
-    ax4.set_xticklabels(letters, fontsize=10, rotation=45)
+    if (!benchmarkResults.empty()) {
+        double bestSpeedup = 0;
+        int bestThreads = 1;
+        for (const auto& result : benchmarkResults) {
+            if (result.speedup > bestSpeedup) {
+                bestSpeedup = result.speedup;
+                bestThreads = result.threadsUsed;
+            }
+        }
+        
+        std::ostringstream oss;
+        oss << "print('Best speedup: " << std::fixed << std::setprecision(2) 
+            << bestSpeedup << "x with " << bestThreads << " threads')";
+        script += oss.str() + "\n";
+    }
     
-    # Добавляем значения на столбцы
-    for bar, freq in zip(bars, frequencies):
-        height = bar.get_height()
-        ax4.text(bar.get_x() + bar.get_width()/2., height,
-                f'{freq:,}', ha='center', va='bottom', fontsize=9)
-else:
-    ax4.text(0.5, 0.5, 'Letter frequency data not available',
-            ha='center', va='center', transform=ax4.transAxes, fontsize=12)
-
-plt.tight_layout()
-
-# Сохраняем все графики
-plt.savefig('openmp_performance_analysis.png', dpi=150, bbox_inches='tight')
-plt.savefig('openmp_performance_analysis.pdf', bbox_inches='tight')
-
-print("\n=== Performance Analysis ===")
-print(f"Best speedup: {max(speedups):.2f}x with {threads[speedups.index(max(speedups))]} threads")
-print(f"Best efficiency: {max(efficiencies):.1f}% with {threads[efficiencies.index(max(efficiencies))]} threads")
-
-print("\n=== Files Generated ===")
-print("1. openmp_performance_analysis.png - Все графики")
-print("2. openmp_performance_analysis.pdf - PDF версия")
-print("3. benchmark_results.csv - Данные производительности")
-print("4. letter_frequencies.csv - Частоты букв")
-
-if letter_freq:
-    total_letters = sum(letter_freq.values())
-    print(f"\n=== Letter Statistics ===")
-    print(f"Total Russian letters analyzed: {total_letters:,}")
-    
-    # Топ-10 букв
-    sorted_freq = sorted(letter_freq.items(), key=lambda x: x[1], reverse=True)[:10]
-    print("\nTop 10 most frequent letters:")
-    for i, (letter, freq) in enumerate(sorted_freq, 1):
-        percentage = (freq / total_letters) * 100
-        print(f"{i:2}. {letter}: {freq:8,} ({percentage:.2f}%)")
-
-print("\n=== Analysis Complete ===")
-)";
+    script += "print('\\n=== Analysis Complete ===')\n";
     
     writePythonPlotScript("generate_plots.py", script);
-    
-    // Также создаем отдельный скрипт для гистограммы частот
-    if (!benchmarkResults.empty() && !benchmarkResults[0].sortedLetters.empty()) {
-        std::string freqScript = R"(#!/usr/bin/env python3
-import matplotlib.pyplot as plt
-import numpy as np
-import csv
-
-print("=== Generating Letter Frequency Plot ===")
-
-# Чтение данных
-letters = []
-frequencies = []
-percentages = []
-
-try:
-    with open('letter_frequencies.csv', 'r') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            letters.append(row['letter'])
-            frequencies.append(int(row['frequency']))
-            percentages.append(float(row['percentage']))
-except FileNotFoundError:
-    print("ERROR: letter_frequencies.csv not found!")
-    exit(1)
-
-# Создаем график
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-
-# Гистограмма
-x_pos = np.arange(len(letters))
-bars = ax1.bar(x_pos, frequencies, color='steelblue', alpha=0.7)
-ax1.set_xlabel('Russian Letters', fontsize=12)
-ax1.set_ylabel('Frequency', fontsize=12)
-ax1.set_title('Frequency of Russian Letters in "Brothers Karamazov"', fontsize=14, fontweight='bold')
-ax1.set_xticks(x_pos)
-ax1.set_xticklabels(letters, fontsize=10, rotation=45)
-
-# Добавляем значения на столбцы
-for bar, freq in zip(bars, frequencies):
-    height = bar.get_height()
-    ax1.text(bar.get_x() + bar.get_width()/2., height,
-            f'{freq:,}', ha='center', va='bottom', fontsize=9)
-
-# Круговая диаграмма (топ-10)
-top_n = min(10, len(letters))
-top_letters = letters[:top_n]
-top_freq = frequencies[:top_n]
-other_freq = sum(frequencies[top_n:]) if len(frequencies) > top_n else 0
-
-if other_freq > 0:
-    top_letters.append('Other')
-    top_freq.append(other_freq)
-
-colors = plt.cm.Set3(np.linspace(0, 1, len(top_letters)))
-wedges, texts, autotexts = ax2.pie(top_freq, labels=top_letters, autopct='%1.1f%%',
-                                   colors=colors, startangle=90, counterclock=False)
-ax2.set_title(f'Top {top_n} Most Frequent Letters', fontsize=14, fontweight='bold')
-
-# Улучшаем читаемость
-for autotext in autotexts:
-    autotext.set_color('black')
-    autotext.set_fontsize(10)
-
-plt.tight_layout()
-plt.savefig('letter_frequency_analysis.png', dpi=150, bbox_inches='tight')
-plt.savefig('letter_frequency_analysis.pdf', bbox_inches='tight')
-
-print(f"Total letters analyzed: {sum(frequencies):,}")
-print(f"Number of unique letters: {len(letters)}")
-print(f"Files saved: letter_frequency_analysis.png, letter_frequency_analysis.pdf")
-print("=== Letter Frequency Analysis Complete ===")
-)";
-        
-        writePythonPlotScript("plot_letter_frequency.py", freqScript);
-    }
 }
 
-// Генерация графика частот букв
+// Генерация графика частот букв - упрощенная версия
 void BookAnalyzer::generateLetterFrequencyPlot(const AnalysisResult& result) {
-    std::string script = R"(#!/usr/bin/env python3
-import matplotlib.pyplot as plt
-import numpy as np
-
-print("=== Quick Letter Frequency Chart ===")
-
-# Простой график для быстрого просмотра
-fig, ax = plt.subplots(figsize=(12, 6))
-
-# Здесь будут данные из анализа
-print("Note: Run full analysis to generate actual frequency plot")
-print("Use: python3 generate_plots.py")
-
-ax.text(0.5, 0.5, 'Run full analysis to generate frequency plot\n\nCommand: ./book_analysis <book_file.txt>',
-        ha='center', va='center', transform=ax.transAxes, fontsize=12)
-ax.set_title('Russian Letter Frequency Analysis', fontsize=14)
-ax.axis('off')
-
-plt.tight_layout()
-plt.savefig('frequency_placeholder.png', dpi=100)
-print("Placeholder image saved: frequency_placeholder.png")
-)";
+    // Упрощенный скрипт
+    std::string script;
+    script += "#!/usr/bin/env python3\n";
+    script += "import matplotlib.pyplot as plt\n\n";
+    script += "print('=== Quick Letter Frequency Chart ===')\n\n";
+    script += "# Простой график для быстрого просмотра\n";
+    script += "fig, ax = plt.subplots(figsize=(12, 6))\n\n";
+    script += "print('Note: Run full analysis to generate actual frequency plot')\n";
+    script += "print('Use: python3 generate_plots.py')\n\n";
+    script += "ax.text(0.5, 0.5, 'Run full analysis to generate frequency plot\\n\\nCommand: ./book_analysis <book_file.txt>',\n";
+    script += "        ha='center', va='center', transform=ax.transAxes, fontsize=12)\n";
+    script += "ax.set_title('Russian Letter Frequency Analysis', fontsize=14)\n";
+    script += "ax.axis('off')\n\n";
+    script += "plt.tight_layout()\n";
+    script += "plt.savefig('frequency_placeholder.png', dpi=100)\n";
+    script += "print('Placeholder image saved: frequency_placeholder.png')\n";
     
     writePythonPlotScript("quick_frequency_plot.py", script);
 }
@@ -601,11 +474,10 @@ void BookAnalyzer::writePythonPlotScript(const std::string& filename, const std:
     file << content;
     file.close();
     
-    // Делаем скрипт исполняемым
     #ifdef __linux__
     std::string command = "chmod +x " + filename;
     int result = system(command.c_str());
-    (void)result;  // Игнорируем возвращаемое значение, чтобы избежать предупреждения
+    (void)result;
     #endif
     
     std::cout << "Python script generated: " << filename << std::endl;
@@ -624,8 +496,6 @@ void BookAnalyzer::printResults(const AnalysisResult& result, int topN) {
     if (result.speedup > 0) {
         std::cout << "  Speedup: " << std::fixed << std::setprecision(2) 
                   << result.speedup << "x" << std::endl;
-        std::cout << "  Efficiency: " << std::setprecision(1) 
-                  << (result.speedup / result.threadsUsed * 100.0) << "%" << std::endl;
     }
     
     std::cout << "\nTop " << topN << " Most Frequent Russian Letters:" << std::endl;
@@ -642,22 +512,6 @@ void BookAnalyzer::printResults(const AnalysisResult& result, int topN) {
     }
     
     std::cout << "\nTotal unique Russian letters: " << result.sortedLetters.size() << std::endl;
-    
-    // Статистика по буквам
-    if (!result.sortedLetters.empty()) {
-        double maxFreq = result.sortedLetters[0].second;
-        double minFreq = result.sortedLetters.back().second;
-        
-        std::cout << "\nLetter Distribution:" << std::endl;
-        std::cout << "  Most frequent: " << result.sortedLetters[0].first 
-                  << " (" << maxFreq << " times, " 
-                  << std::fixed << std::setprecision(2) 
-                  << (maxFreq * 100.0 / result.totalLetters) << "%)" << std::endl;
-        std::cout << "  Least frequent: " << result.sortedLetters.back().first 
-                  << " (" << minFreq << " times, "
-                  << std::fixed << std::setprecision(2)
-                  << (minFreq * 100.0 / result.totalLetters) << "%)" << std::endl;
-    }
 }
 
 // Вывод результатов бенчмарка
@@ -681,29 +535,10 @@ void BookAnalyzer::printBenchmarkResults(const std::vector<AnalysisResult>& resu
                   << std::setw(13) << std::setprecision(1) << efficiency << "%"
                   << std::setw(15) << result.totalLetters << std::endl;
     }
-    
-    // Находим оптимальное количество потоков
-    if (results.size() > 1) {
-        double bestEfficiency = 0;
-        int bestThreads = 1;
-        
-        for (const auto& result : results) {
-            double efficiency = result.speedup / result.threadsUsed;
-            if (efficiency > bestEfficiency) {
-                bestEfficiency = efficiency;
-                bestThreads = result.threadsUsed;
-            }
-        }
-        
-        std::cout << "\nOptimal thread count for this system: " << bestThreads 
-                  << " (efficiency: " << std::fixed << std::setprecision(1) 
-                  << (bestEfficiency * 100.0) << "%)" << std::endl;
-    }
 }
 
 // Статические методы для тестов
 bool BookAnalyzer::isRussianLetter(char c) {
-    // ASCII буквы A-Z, a-z
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 }
 
@@ -715,6 +550,5 @@ char BookAnalyzer::toLowerRussian(char c) {
 }
 
 std::string BookAnalyzer::createTestText() {
-    // Простой тестовый текст
     return "aaaabbbbccccddddeeeeffffgggghhhhiiiijjjjkkkkllllmmmmnnnnoooopppp";
 }
