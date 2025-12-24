@@ -4,14 +4,12 @@
 #include <string>
 
 int main(int argc, char* argv[]) {
-    std::cout << "==========================================" << std::endl;
     std::cout << "OpenMP Project: Numerical Integration" << std::endl;
     std::cout << "Method: Rectangle Rule with OpenMP" << std::endl;
-    std::cout << "==========================================" << std::endl;
     
     // Параметры по умолчанию
-    size_t segments = 10000000;  // 10 миллионов сегментов
-    std::vector<int> threadConfigs = {1, 2, 4, 8};
+    size_t segments = 1000000;  // 1 миллион сегментов (меньше для быстрого теста)
+    std::vector<int> threadConfigs = {1, 2, 4};
     
     // Парсинг аргументов командной строки
     if (argc > 1) {
@@ -37,8 +35,14 @@ int main(int argc, char* argv[]) {
     for (int t : threadConfigs) std::cout << t << " ";
     std::cout << std::endl;
     
+    // УБРАТЬ вызов omp_get_max_threads() если вызывает проблемы
+    // или добавить проверку
+    #ifdef _OPENMP
     std::cout << "\nMaximum available threads: " << omp_get_max_threads() << std::endl;
-    std::cout << "==========================================" << std::endl;
+    #else
+    std::cout << "\nOpenMP not available" << std::endl;
+    #endif
+    
     
     try {
         // Запускаем тесты
@@ -50,23 +54,16 @@ int main(int argc, char* argv[]) {
         // Генерируем скрипт для построения графиков
         calculator.generatePlotScript(results, "plot_results.py");
         
-        // Запускаем Python скрипт (если установлен Python)
-        std::cout << "\nGenerating plots..." << std::endl;
-        #ifdef _WIN32
-        system("python plot_results.py");
-        #else
-        system("python3 plot_results.py");
-        #endif
+        // УБРАТЬ автоматический запуск Python скрипта
+        std::cout << "\nTo generate plots, run: python3 plot_results.py" << std::endl;
         
     } catch (const std::exception& e) {
         std::cerr << "\nError: " << e.what() << std::endl;
         return 1;
     }
     
-    std::cout << "\n==========================================" << std::endl;
     std::cout << "Program completed successfully!" << std::endl;
-    std::cout << "Check integration_results.csv and speedup_plot.png" << std::endl;
-    std::cout << "==========================================" << std::endl;
+    std::cout << "Check integration_results.csv" << std::endl;
     
     return 0;
 }
