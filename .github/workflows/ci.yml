@@ -1,14 +1,15 @@
-name: CI/CD Pipeline for Knight Selection Project
+name: CI/CD Pipeline for Parallel Programming Project
 
 on:
   push:
-    branches: [ main, coder, tester ]
+    branches: [ main, coder, tester, part2-openmp ]
   pull_request:
     branches: [ main ]
 
 jobs:
-  build-and-test:
+  part1-threads:
     runs-on: ubuntu-22.04
+    name: Part 1 - Threads (Knight Selection)
     
     steps:
     - name: Checkout code
@@ -35,12 +36,14 @@ jobs:
           cd -
         fi
         
-    - name: Configure and build
+    - name: Configure and build Part 1
       run: |
-        echo "Configuring CMake..."
-        mkdir -p build
-        cd build
-        cmake .. -DBUILD_TESTS=ON
+        echo "Configuring CMake for Part 1 (Threads)..."
+        mkdir -p build_part1
+        cd build_part1
+        
+        # Указываем правильный путь к CMakeLists.txt в part1-threads
+        cmake ../part1-threads -DBUILD_TESTS=ON
         
         echo "Building project..."
         make -j$(nproc)
@@ -48,9 +51,9 @@ jobs:
         echo "Checking built files..."
         find . -type f -name "*" | head -20
         
-    - name: Run tests
+    - name: Run tests for Part 1
       run: |
-        cd build
+        cd build_part1
         
         echo "Looking for test executables..."
         # Ищем тестовый файл в нескольких возможных местах
@@ -67,9 +70,9 @@ jobs:
           exit 1
         fi
         
-    - name: Run main application
+    - name: Run main application for Part 1
       run: |
-        cd build
+        cd build_part1
         if [ -f "KnightSelectionApp" ]; then
           echo "Running main application..."
           timeout 3s ./KnightSelectionApp || echo "Application completed"
@@ -78,8 +81,106 @@ jobs:
           find . -name "*KnightSelectionApp*" -type f
         fi
         
+    - name: Upload Part 1 artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: part1-threads-artifacts
+        path: |
+          build_part1/KnightSelectionApp
+          build_part1/knight_selection_tests
+        if-no-files-found: warn
+        
+  part2-openmp:
+    runs-on: ubuntu-22.04
+    name: Part 2 - OpenMP (Numerical Integration)
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          cmake \
+          g++ \
+          build-essential \
+          libomp-dev \
+          libgtest-dev \
+          python3 \
+          python3-matplotlib \
+          python3-pip
+          
+    - name: Build Google Test for OpenMP part
+      run: |
+        if [ ! -f "/usr/lib/libgtest.a" ] && [ ! -f "/usr/lib/x86_64-linux-gnu/libgtest.a" ]; then
+          echo "Building Google Test from source..."
+          cd /usr/src/gtest
+          sudo cmake CMakeLists.txt
+          sudo make
+          sudo find . -name "*.a" -exec cp {} /usr/lib \;
+          cd -
+        fi
+        
+    - name: Configure and build Part 2
+      run: |
+        echo "Configuring CMake for Part 2 (OpenMP)..."
+        mkdir -p build_part2
+        cd build_part2
+        
+        # Указываем правильный путь к CMakeLists.txt в part2-openmp
+        cmake ../part2-openmp -DBUILD_TESTS=ON
+        
+        echo "Building project..."
+        make -j$(nproc)
+        
+        echo "Checking built files..."
+        find . -type f -name "*" | head -20
+        
+    - name: Run tests for Part 2
+      run: |
+        cd build_part2
+        
+        echo "Looking for test executables..."
+        if [ -f "integral_tests" ]; then
+          echo "Found: ./integral_tests"
+          ./integral_tests --gtest_color=yes --gtest_brief=1
+        elif [ -f "tests/integral_tests" ]; then
+          echo "Found: ./tests/integral_tests"
+          ./tests/integral_tests --gtest_color=yes --gtest_brief=1
+        else
+          echo "WARNING: Test executable not found for Part 2"
+          echo "Available files:"
+          find . -type f -executable
+        fi
+        
+    - name: Run main application for Part 2
+      run: |
+        cd build_part2
+        if [ -f "integral_app" ]; then
+          echo "Running OpenMP integration application..."
+          timeout 5s ./integral_app 1000000 1 2 4 8 || echo "Application completed or timed out"
+        else
+          echo "WARNING: OpenMP application not found"
+          find . -name "*integral*" -type f
+        fi
+        
+    - name: Upload Part 2 artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: part2-openmp-artifacts
+        path: |
+          build_part2/integral_app
+          build_part2/integration_results.csv
+          build_part2/speedup_plot.png
+        if-no-files-found: warn
+        
   code-quality:
     runs-on: ubuntu-22.04
+    name: Code Quality Analysis
+    needs: [part1-threads, part2-openmp]
     
     steps:
     - name: Checkout code
@@ -90,20 +191,34 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y cppcheck
         
-    - name: Run static analysis
+    - name: Run static analysis for Part 1
       run: |
-        echo "Running cppcheck..."
+        echo "Running cppcheck for Part 1 (Threads)..."
         cppcheck \
           --enable=warning,style,performance \
           --suppress=missingIncludeSystem \
           --error-exitcode=0 \
-          src/ 2>&1 | tee cppcheck.log
+          part1-threads/src/ 2>&1 | tee cppcheck_part1.log
         
-        echo "=== Cppcheck summary ==="
-        grep -E "(error|warning|style):" cppcheck.log | head -10 || true
+        echo "=== Cppcheck summary for Part 1 ==="
+        grep -E "(error|warning|style):" cppcheck_part1.log | head -10 || true
+        
+    - name: Run static analysis for Part 2
+      run: |
+        echo "Running cppcheck for Part 2 (OpenMP)..."
+        cppcheck \
+          --enable=warning,style,performance \
+          --suppress=missingIncludeSystem \
+          --error-exitcode=0 \
+          part2-openmp/src/ 2>&1 | tee cppcheck_part2.log
+        
+        echo "=== Cppcheck summary for Part 2 ==="
+        grep -E "(error|warning|style):" cppcheck_part2.log | head -10 || true
         
   coverage:
     runs-on: ubuntu-22.04
+    name: Code Coverage
+    needs: [part1-threads]
     
     steps:
     - name: Checkout code
@@ -114,26 +229,26 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y gcovr lcov
         
-    - name: Build with coverage
+    - name: Build Part 1 with coverage
       run: |
-        echo "Building with coverage enabled..."
-        mkdir -p coverage_build
-        cd coverage_build
+        echo "Building Part 1 with coverage enabled..."
+        mkdir -p coverage_build_part1
+        cd coverage_build_part1
         
         # Собираем с флагами покрытия
-        cmake .. \
+        cmake ../../part1-threads \
           -DBUILD_TESTS=ON \
           -DCMAKE_BUILD_TYPE=Debug \
           -DCMAKE_CXX_FLAGS="--coverage -fprofile-arcs -ftest-coverage"
         
         make -j$(nproc)
         
-        echo "Build completed. Files in coverage_build/:"
+        echo "Build completed. Files:"
         find . -type f -name "*test*" -o -name "*Test*" | head -10
         
     - name: Run tests for coverage
       run: |
-        cd coverage_build
+        cd coverage_build_part1
         echo "Running tests for coverage..."
         
         # Ищем и запускаем тесты
@@ -142,29 +257,28 @@ jobs:
         elif [ -f "./tests/knight_selection_tests" ]; then
           ./tests/knight_selection_tests --gtest_color=yes --gtest_brief=1
         else
-          echo "WARNING: Test executable not found in coverage_build/"
+          echo "WARNING: Test executable not found for coverage"
           echo "Available files:"
           find . -type f -executable
-          # Не выходим с ошибкой, просто продолжаем
         fi
         
     - name: Generate coverage report
       run: |
-        cd coverage_build
+        cd coverage_build_part1
         echo "Generating coverage report..."
         
         # Генерируем отчет
         gcovr \
-          --root .. \
+          --root ../../part1-threads \
           --exclude=".*/tests/.*" \
-          --exclude=".*/coverage_build/.*" \
+          --exclude=".*/coverage_build.*/.*" \
           --html \
           --html-details \
           --output=coverage_report.html \
           --print-summary
         
         echo "=== Coverage summary ==="
-        gcovr --root .. --exclude=".*/tests/.*" --exclude=".*/coverage_build/.*" --print-summary
+        gcovr --root ../../part1-threads --exclude=".*/tests/.*" --exclude=".*/coverage_build.*/.*" --print-summary
         
     - name: Upload coverage report
       if: always()
@@ -172,4 +286,35 @@ jobs:
       with:
         name: coverage-report
         path: |
-          coverage_build/coverage_report.html
+          coverage_build_part1/coverage_report.html
+          
+  summary:
+    runs-on: ubuntu-22.04
+    name: Summary
+    needs: [part1-threads, part2-openmp, code-quality, coverage]
+    if: always()
+    
+    steps:
+    - name: Check job status
+      run: |
+        echo "=== CI/CD Pipeline Summary ==="
+        echo "Part 1 (Threads): ${{ needs.part1-threads.result }}"
+        echo "Part 2 (OpenMP): ${{ needs.part2-openmp.result }}"
+        echo "Code Quality: ${{ needs.code-quality.result }}"
+        echo "Coverage: ${{ needs.coverage.result }}"
+        
+        echo ""
+        echo "Artifacts generated:"
+        echo "- Part 1 artifacts: part1-threads-artifacts"
+        echo "- Part 2 artifacts: part2-openmp-artifacts"
+        echo "- Coverage report: coverage-report"
+        
+        # Проверяем, были ли успешны все обязательные jobs
+        if [[ "${{ needs.part1-threads.result }}" != "success" ]]; then
+          echo "ERROR: Part 1 failed!"
+          exit 1
+        fi
+        
+        if [[ "${{ needs.part2-openmp.result }}" != "success" ]]; then
+          echo "WARNING: Part 2 failed or had issues"
+        fi
