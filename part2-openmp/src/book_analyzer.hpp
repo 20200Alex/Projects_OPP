@@ -41,6 +41,7 @@ public:
     // Генерация графиков
     static void generatePlotScript(const std::vector<AnalysisResult>& benchmarkResults);
     static void generateLetterFrequencyPlot(const AnalysisResult& result);
+    static void generateSpeedupPlot(const std::vector<AnalysisResult>& results);
     
     // Вывод результатов
     static void printResults(const AnalysisResult& result, int topN = 20);
