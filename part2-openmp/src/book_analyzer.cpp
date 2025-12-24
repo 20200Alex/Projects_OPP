@@ -1,6 +1,11 @@
 #include "book_analyzer.hpp"
 #include <unordered_map>
 #include <cmath>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <algorithm>
+#include <omp.h>
 
 BookAnalyzer::BookAnalyzer() {}
 
@@ -132,7 +137,10 @@ BookAnalyzer::AnalysisResult BookAnalyzer::analyzeTextImpl(
                 threadMap[lowerLetter]++;
                 totalLetters++;
             } else {
-                i++;  // Продвигаемся на 1 байт для не-русских символов
+                // Если не русская буква, продвигаемся на 1 байт
+                if (i == originalPos) {
+                    i++;
+                }
             }
         }
     }
@@ -596,7 +604,8 @@ void BookAnalyzer::writePythonPlotScript(const std::string& filename, const std:
     // Делаем скрипт исполняемым
     #ifdef __linux__
     std::string command = "chmod +x " + filename;
-    system(command.c_str());
+    int result = system(command.c_str());
+    (void)result;  // Игнорируем возвращаемое значение, чтобы избежать предупреждения
     #endif
     
     std::cout << "Python script generated: " << filename << std::endl;
@@ -690,4 +699,22 @@ void BookAnalyzer::printBenchmarkResults(const std::vector<AnalysisResult>& resu
                   << " (efficiency: " << std::fixed << std::setprecision(1) 
                   << (bestEfficiency * 100.0) << "%)" << std::endl;
     }
+}
+
+// Статические методы для тестов
+bool BookAnalyzer::isRussianLetter(char c) {
+    // ASCII буквы A-Z, a-z
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
+
+char BookAnalyzer::toLowerRussian(char c) {
+    if (c >= 'A' && c <= 'Z') {
+        return c + ('a' - 'A');
+    }
+    return c;
+}
+
+std::string BookAnalyzer::createTestText() {
+    // Простой тестовый текст
+    return "aaaabbbbccccddddeeeeffffgggghhhhiiiijjjjkkkkllllmmmmnnnnoooopppp";
 }
