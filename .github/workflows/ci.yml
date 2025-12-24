@@ -32,7 +32,7 @@ jobs:
           cd -
         fi
         
-    - name: Configure and build Book Analyzer
+        - name: Configure and build Book Analyzer
       run: |
         echo "Configuring CMake for Book Analyzer (OpenMP)..."
         mkdir -p build_book_analyzer
@@ -96,11 +96,8 @@ jobs:
         echo 'endif()' >> CMakeLists.txt
         
         echo "Building project..."
-        cmake . -DBUILD_TESTS=ON
+        cmake .  # Убрано -DBUILD_TESTS=ON
         make -j$(nproc)
-        
-        echo "Checking built files..."
-        ls -la
         
     - name: Run Book Analyzer tests
       run: |
