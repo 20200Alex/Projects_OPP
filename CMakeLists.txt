@@ -1,96 +1,36 @@
 cmake_minimum_required(VERSION 3.14)
-project(KnightSelectionProject VERSION 1.0.0 LANGUAGES CXX)
+project(ParallelProgrammingProject VERSION 1.0.0)
 
-# Настройка стандарта C++
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+# Описание проекта
+message(STATUS "==========================================")
+message(STATUS "Parallel Programming Project")
+message(STATUS "Part 1: Threads - Knight Selection")
+message(STATUS "Part 2: OpenMP - Numerical Integration")
+message(STATUS "Part 3: MPI - (to be implemented)")
+message(STATUS "==========================================")
 
-# Опции проекта
-option(BUILD_TESTS "Build tests with Google Test" ON)
-option(BUILD_EXAMPLES "Build example programs" OFF)
+# Основные опции
+option(BUILD_ALL_PARTS "Build all project parts" ON)
+option(BUILD_PART1 "Build Part 1 (Threads)" ON)
+option(BUILD_PART2 "Build Part 2 (OpenMP)" ON)
 
-# Настройки компиляции
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_compile_options(-g -O0 -Wall -Wextra -Wpedantic)
-else()
-    add_compile_options(-O2 -Wall)
-endif()
-
-# Поиск pthread
-find_package(Threads REQUIRED)
-
-# Основная библиотека проекта
-add_library(KnightSelectionLib
-    src/KnightSelection.cpp
-)
-
-target_include_directories(KnightSelectionLib
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-
-# Основное приложение
-add_executable(KnightSelectionApp
-    src/main.cpp
-)
-
-target_link_libraries(KnightSelectionApp
-    KnightSelectionLib
-    Threads::Threads
-)
-
-# Тестирование
-if(BUILD_TESTS)
-    enable_testing()
-    
-    # Поиск GoogleTest
-    find_package(GTest)
-    
-    if(GTest_FOUND)
-        message(STATUS "Google Test found, building tests")
-        
-        # Тестовое приложение
-        add_executable(knight_selection_tests
-            tests/test_knight_selection.cpp
-        )
-        
-        target_link_libraries(knight_selection_tests
-            KnightSelectionLib
-            GTest::gtest
-            GTest::gtest_main
-            Threads::Threads
-        )
-        
-        target_include_directories(knight_selection_tests
-            PRIVATE
-                ${CMAKE_CURRENT_SOURCE_DIR}/src
-        )
-        
-        # Добавление тестов в CTest
-        add_test(NAME KnightSelectionTests
-            COMMAND knight_selection_tests
-        )
-        
-        # Создаем каталог для исполняемого файла тестов
-        set_target_properties(knight_selection_tests PROPERTIES
-            RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests
-        )
-    else()
-        message(WARNING "Google Test not found, tests will not be built")
+# Если нужно собирать все из корня
+if(BUILD_ALL_PARTS)
+    if(BUILD_PART1)
+        message(STATUS "Adding Part 1: Threads")
+        add_subdirectory(part1-threads)
     endif()
+    
+    if(BUILD_PART2)
+        message(STATUS "Adding Part 2: OpenMP")
+        add_subdirectory(part2-openmp)
+    endif()
+else()
+    message(STATUS "Note: Use individual CMakeLists.txt in each part directory")
+    message(STATUS "  cd part1-threads && mkdir build && cd build && cmake ..")
+    message(STATUS "  cd part2-openmp && mkdir build && cd build && cmake ..")
 endif()
 
-# Установка
-install(TARGETS KnightSelectionApp
-    RUNTIME DESTINATION bin
-)
-
-install(TARGETS KnightSelectionLib
-    ARCHIVE DESTINATION lib
-    LIBRARY DESTINATION lib
-)
-
-install(FILES src/KnightSelection.hpp
-    DESTINATION include
-)
+# Установочные цели (опционально)
+install(DIRECTORY part1-threads/src/ DESTINATION include/part1-threads)
+install(DIRECTORY part2-openmp/src/ DESTINATION include/part2-openmp)
